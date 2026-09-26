@@ -4,6 +4,7 @@
   const { FONTS, MOTIONS, EFFECTS, CUSTOM_WAVES, defaultSticker, drawFrame } = window.Stickers;
   const { assembleAPNG, quantize, encodeIndexedPNG, createZip } = window.Encoder;
   const { parseMotionText, EXAMPLES: MOTION_EXAMPLES } = window.MotionWords;
+  const { removeBackgroundPixels } = window.BgRemove;
 
   const W = 320;
   const H = 270;
@@ -18,7 +19,13 @@
   const current = () => state.stickers[state.selected];
 
   function newSticker(base) {
-    return { ...defaultSticker(), frames: 12, duration: 1, loops: 4, ...(base || {}) };
+    const st = { ...defaultSticker(), frames: 12, duration: 1, loops: 4, ...(base || {}) };
+    st.custom = { ...defaultSticker().custom, ...st.custom };
+    st.bg = { ...defaultSticker().bg, ...st.bg };
+    // Stickers saved before background removal existed only have `image`.
+    if (st.image && !st.originalImage) st.originalImage = st.image;
+    st.bg.tolerance = Math.min(st.bg.tolerance, 45);
+    return st;
   }
 
   // ---------- persistence ----------
@@ -95,15 +102,6 @@
     });
   }
 
-  function sampleCorners(d, w, h) {
-    const at = (x, y) => {
-      const i = (y * w + x) * 4;
-      return [d[i], d[i + 1], d[i + 2]];
-    };
-    const corners = [at(0, 0), at(w - 1, 0), at(0, h - 1), at(w - 1, h - 1)];
-    return corners.reduce((sum, c) => sum.map((v, i) => v + c[i] / 4), [0, 0, 0]);
-  }
-
   // An already-transparent PNG has see-through corners; a photo or drawing on paper doesn't.
   async function hasOpaqueCorners(dataUrl) {
     const img = await loadImageEl(dataUrl);
@@ -116,39 +114,10 @@
     return corners.some(([x, y]) => ctx.getImageData(x, y, 1, 1).data[3] > 200);
   }
 
-  // Soften the hard cutout edge left by the flood fill by lightly blurring alpha only.
-  function featherAlpha(d, w, h) {
-    const alpha = new Uint8ClampedArray(w * h);
-    for (let i = 0; i < w * h; i++) alpha[i] = d[i * 4 + 3];
-    for (let y = 0; y < h; y++) {
-      for (let x = 0; x < w; x++) {
-        let sum = 0;
-        let count = 0;
-        for (let dy = -1; dy <= 1; dy++) {
-          for (let dx = -1; dx <= 1; dx++) {
-            const nx = x + dx;
-            const ny = y + dy;
-            if (nx < 0 || ny < 0 || nx >= w || ny >= h) continue;
-            sum += alpha[ny * w + nx];
-            count++;
-          }
-        }
-        d[(y * w + x) * 4 + 3] = Math.round(sum / count);
-      }
-    }
-  }
-
-  /**
-   * Cut a flat-color background out of an uploaded image.
-   * Flood-fills from the four edges, removing pixels close to the target
-   * color (a chosen click, or the average of the corners), then softens
-   * the cut edge. Works well for a solid-color sheet or backdrop; a busy
-   * photo background will need the sensitivity turned down or a color pick.
-   */
+  // Cut a flat background out of an uploaded image; see js/bg-remove.js for how.
   async function removeBackground(dataUrl, { tolerance, color }) {
     const img = await loadImageEl(dataUrl);
-    const maxDim = 900;
-    const scale = Math.min(1, maxDim / Math.max(img.width, img.height));
+    const scale = Math.min(1, 900 / Math.max(img.width, img.height));
     const w = Math.max(1, Math.round(img.width * scale));
     const h = Math.max(1, Math.round(img.height * scale));
     const c = document.createElement('canvas');
@@ -157,47 +126,10 @@
     const ctx = c.getContext('2d', { willReadFrequently: true });
     ctx.drawImage(img, 0, 0, w, h);
     const id = ctx.getImageData(0, 0, w, h);
-    const d = id.data;
-    const target = color || sampleCorners(d, w, h);
-    const thresh = tolerance * 2.55;
-    const idx = (x, y) => y * w + x;
-    const dist = (i) => {
-      const o = i * 4;
-      const dr = d[o] - target[0];
-      const dg = d[o + 1] - target[1];
-      const db = d[o + 2] - target[2];
-      return Math.sqrt(dr * dr + dg * dg + db * db);
-    };
-    const bg = new Uint8Array(w * h);
-    const stack = [];
-    const seed = (x, y) => {
-      const i = idx(x, y);
-      if (!bg[i] && dist(i) <= thresh) {
-        bg[i] = 1;
-        stack.push(i);
-      }
-    };
-    for (let x = 0; x < w; x++) {
-      seed(x, 0);
-      seed(x, h - 1);
-    }
-    for (let y = 0; y < h; y++) {
-      seed(0, y);
-      seed(w - 1, y);
-    }
-    while (stack.length) {
-      const i = stack.pop();
-      const x = i % w;
-      const y = (i / w) | 0;
-      if (x > 0) seed(x - 1, y);
-      if (x < w - 1) seed(x + 1, y);
-      if (y > 0) seed(x, y - 1);
-      if (y < h - 1) seed(x, y + 1);
-    }
-    for (let i = 0; i < w * h; i++) if (bg[i]) d[i * 4 + 3] = 0;
-    featherAlpha(d, w, h);
+    const res = removeBackgroundPixels(id.data, w, h, { tolerance, color });
+    if (res.alreadyTransparent) return { alreadyTransparent: true, dataUrl };
     ctx.putImageData(id, 0, 0);
-    return c.toDataURL('image/png');
+    return { alreadyTransparent: false, dataUrl: c.toDataURL('image/png') };
   }
 
   // ---------- rendering ----------
@@ -338,7 +270,7 @@
         const st = current();
         st.originalImage = dataUrl;
         st.image = dataUrl;
-        st.bg = { enabled: false, tolerance: 30, color: null, hasBackground: await hasOpaqueCorners(dataUrl) };
+        st.bg = { enabled: false, tolerance: 25, color: null, hasBackground: await hasOpaqueCorners(dataUrl) };
         changed();
       } catch (err) {
         setStatus(err.message, true);
@@ -348,7 +280,7 @@
       const st = current();
       st.image = null;
       st.originalImage = null;
-      st.bg = { enabled: false, tolerance: 30, color: null };
+      st.bg = { enabled: false, tolerance: 25, color: null };
       changed();
     });
 
@@ -443,8 +375,15 @@
     }
     setStatus('背景を透明にしています…');
     try {
-      const result = await removeBackground(st.originalImage, { tolerance: st.bg.tolerance, color: st.bg.color });
+      const out = await removeBackground(st.originalImage, { tolerance: st.bg.tolerance, color: st.bg.color });
       if (token !== bgToken) return; // a newer request superseded this one
+      if (out.alreadyTransparent) {
+        st.bg.enabled = false;
+        changed();
+        setStatus('この画像は、もう背景が透明になっています');
+        return;
+      }
+      const result = out.dataUrl;
       if (st.image && st.image !== st.originalImage && st.image !== result) imageCache.delete(st.image);
       st.image = result;
       changed();
@@ -497,8 +436,12 @@
       if ($(elId).value !== String(st.custom[prop])) $(elId).value = st.custom[prop];
     }
 
-    $('bgPanel').hidden = !st.originalImage;
-    if (st.originalImage) {
+    $('bgToggle').disabled = !st.originalImage;
+    if (!st.originalImage) {
+      $('bgToggle').textContent = '先に「画像を選ぶ」で画像を入れてね';
+      $('bgHint').hidden = true;
+      $('bgControls').hidden = true;
+    } else {
       $('bgToggle').setAttribute('aria-pressed', String(st.bg.enabled));
       $('bgToggle').textContent = st.bg.enabled ? '背景を元に戻す' : '背景を透明にする';
       $('bgHint').hidden = st.bg.enabled || st.bg.hasBackground === false;

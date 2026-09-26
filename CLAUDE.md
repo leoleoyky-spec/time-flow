@@ -16,8 +16,9 @@ time-flow/
 ├── js/encoder.js        # APNG assembly, palette quantizer, indexed PNG, ZIP (browser + Node)
 ├── js/animations.js     # Sticker drawing: motions, effects, text layout
 ├── js/motion-words.js   # Japanese text → custom-motion slider values (browser + Node)
+├── js/bg-remove.js      # Background removal on raw RGBA pixels (browser + Node)
 ├── js/app.js            # UI state, preview, export, localStorage persistence
-├── test/                # node:test unit tests for js/encoder.js and js/motion-words.js
+├── test/                # node:test unit tests for the browser+Node modules
 └── package.json         # npm scripts (no dependencies)
 ```
 
@@ -25,10 +26,14 @@ LINE animated sticker rules the app enforces: 320×270 px, 5–20 frames, total 
 1–4 loops, ≤ 300 KB per file, sets of 8/16/24, plus `main.png` (240×240 APNG) and `tab.png` (96×74).
 
 Two features worth knowing about when touching `js/app.js` or `js/animations.js`:
-- **Background removal**: `removeBackground()` in `js/app.js` flood-fills a flat background out of
-  an uploaded image (color picked by click or auto-detected from the corners), then feathers the
-  cut edge. A sticker keeps both `originalImage` (untouched upload) and `image` (what's drawn), so
-  toggling or re-tuning removal never re-compresses the source.
+- **Background removal**: `removeBackgroundPixels()` in `js/bg-remove.js` flood-fills a flat
+  background out of an uploaded image (color picked by click or auto-detected from opaque corners).
+  The background-colored area is eroded before the fill so it can't leak through small gaps in a
+  crayon/pencil outline into the inside of the drawing (a real bug: white panda faces got erased),
+  then grown back and the edge feathered. Keep the strength slider capped (max 45): above that the
+  outline itself matches the background and nothing can protect the drawing. A sticker keeps both
+  `originalImage` (untouched upload) and `image` (what's drawn), so toggling or re-tuning removal
+  never re-compresses the source.
 - **Custom motion**: the `custom` entry in `MOTIONS` (`js/animations.js`) reads per-sticker sliders
   from `sticker.custom` (wave shape, speed, move X/Y, rotate, zoom) instead of a fixed formula, for
   when the built-in motion presets aren't specific enough. Users can also type the motion in

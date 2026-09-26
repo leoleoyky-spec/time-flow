@@ -86,15 +86,25 @@
       // slider the editor exposes maps straight to one term below.
       fn: (t, W, H, sticker) => {
         const cfg = (sticker && sticker.custom) || {};
-        const wave = waveShape(cfg.wave, t * TAU * (cfg.speed || 1));
+        // "止まる時間": the motion plays in the first part of the loop, then rests.
+        const active = 1 - (cfg.pause || 0) / 100;
+        if (t >= active) return {};
+        const tt = t / active;
+        const phase = tt * TAU * (cfg.speed || 1);
+        // Fade shake in/out so it starts and ends at rest when there is a pause.
+        const env = cfg.pause && cfg.wave === 'shake' ? Math.sin(Math.PI * tt) : 1;
+        const wave = waveShape(cfg.wave, phase) * env;
+        // "円を描く": X runs a quarter turn ahead of Y, so the two together trace a circle.
+        const waveX = cfg.path === 'circle' ? waveShape(cfg.wave, phase + Math.PI / 2) * env : wave;
         const rot = ((cfg.rotate || 0) * Math.PI) / 180;
         const s = 1 + wave * ((cfg.zoom || 0) / 100);
+        const squash = wave * ((cfg.squash || 0) / 100);
         return {
-          x: wave * ((cfg.moveX || 0) / 100) * W * 0.18,
+          x: waveX * ((cfg.moveX || 0) / 100) * W * 0.18,
           y: wave * ((cfg.moveY || 0) / 100) * H * 0.18,
           rot: wave * rot,
-          sx: s,
-          sy: s,
+          sx: s * (1 + squash),
+          sy: s * (1 - squash),
         };
       },
     },
@@ -104,6 +114,11 @@
     smooth: { label: 'なめらか' },
     bounce: { label: 'はねる' },
     shake: { label: 'ぶるぶる' },
+  };
+
+  const CUSTOM_PATHS = {
+    line: { label: 'まっすぐ' },
+    circle: { label: '円を描く' },
   };
 
   // Shared shape for the custom motion's four sliders, so they all move in sync.
@@ -148,8 +163,8 @@
       motion: 'bounce',
       effect: 'sparkle',
       effectColor: '#ffd23f',
-      custom: { wave: 'smooth', speed: 1, moveX: 0, moveY: 22, rotate: 6, zoom: 6 },
-      bg: { enabled: false, tolerance: 30, color: null }, // color: null = auto-detect from the corners
+      custom: { wave: 'smooth', path: 'line', speed: 1, moveX: 0, moveY: 22, rotate: 6, zoom: 6, pause: 0, squash: 0, text: '' },
+      bg: { enabled: false, tolerance: 25, color: null }, // color: null = auto-detect from the corners
     };
   }
 
@@ -416,5 +431,5 @@
     return x - Math.floor(x);
   }
 
-  root.Stickers = { FONTS, MOTIONS, EFFECTS, CUSTOM_WAVES, defaultSticker, drawFrame };
+  root.Stickers = { FONTS, MOTIONS, EFFECTS, CUSTOM_WAVES, CUSTOM_PATHS, defaultSticker, drawFrame };
 })(window);
