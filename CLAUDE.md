@@ -17,6 +17,7 @@ time-flow/
 ├── js/animations.js     # Sticker drawing: motions, effects, text layout
 ├── js/motion-words.js   # Japanese text → motion sliders / whole-sticker settings (browser + Node)
 ├── js/bg-remove.js      # Background removal on raw RGBA pixels (browser + Node)
+├── js/parts.js         # Moving one traced part: hole filling, joint guess (browser + Node)
 ├── js/app.js            # UI state, preview, export, localStorage persistence
 ├── test/                # node:test unit tests for the browser+Node modules
 └── package.json         # npm scripts (no dependencies)
@@ -42,6 +43,11 @@ Two features worth knowing about when touching `js/app.js` or `js/animations.js`
   quoted sticker text, colors (assigned to the nearest noun: 文字/フチ/effect), effect, font, size
   and timing from one sentence. Both are deliberately keyword-based (no AI call) so the app stays
   free and offline for whoever it's shared with.
+- **Moving one part** ("左手だけ振る"): the user traces the part on the picture (`sticker.parts`,
+  outline and joint in 0–1 image coords). `buildLayers()` in `js/app.js` cuts each part out and
+  fills the hole with `inpaint()` from `js/parts.js`; `drawFrame()` then draws the base and rotates
+  or shifts each part around its joint. The app can't find a hand by itself (that would need AI
+  image recognition), so a worded part request with no traced part asks the user to trace it.
 
 ## Development Workflow
 

@@ -255,9 +255,48 @@
     '「OK!」を太い文字で、集中線を出して速くドキドキ',
   ];
 
+
+  // ---- one part only ("左手だけ左右に振る") ----
+
+  const BODY_PARTS = ['左手', '右手', '両手', '左腕', '右腕', '手', '腕', '左耳', '右耳', '耳', 'しっぽ', '尻尾', 'シッポ',
+    '頭', 'あたま', '顔', '足', 'あし', '羽', 'はね', 'ほっぺ', '目', 'リボン', '帽子', 'マグカップ', 'カップ'];
+
+  /**
+   * Detect a request to move one part of the picture.
+   * @returns {null | {name: string, only: boolean, cfg: {type, amount, speed}, understood: string[]}}
+   *   `only` is true for "…だけ", meaning the rest of the picture should stay still.
+   */
+  function parsePartRequest(text) {
+    const t = String(text || '');
+    const name = BODY_PARTS.find((p) => t.includes(p));
+    if (!name) return null;
+    // "羽" / "はね" are parts, but "はね" is also 跳ね(る); only treat it as a part when followed by を/が/だけ/の.
+    if ((name === 'はね') && !/はね(を|が|だけ|の)/.test(t)) return null;
+    const rest = t.split(name).join(' ');
+    const only = /だけ|のみ|以外は?(動かさない|止め)/.test(rest);
+
+    let type = 'wave';
+    let label = 'ふる';
+    if (/上下|ぴょこ|ピョコ|跳ね|はね|うなず/.test(rest)) { type = 'updown'; label = '上下にうごく'; }
+    else if (/震|ぶるぶる|ブルブル|ぷるぷる|プルプル/.test(rest)) { type = 'shake'; label = 'ぶるぶる'; }
+    else if (/横に|スライド|左右にうごく|左右に動く/.test(rest)) { type = 'side'; label = '左右にうごく'; }
+    else if (/振|ふる|ふっ|フリフリ|バイバイ|左右|パタパタ|ぱたぱた|ゆら|揺/.test(rest)) { type = 'wave'; label = 'ふる'; }
+
+    let amount = 50;
+    let speed = 2;
+    const understood = [name + (only ? 'だけ' : ''), label];
+    if (has(rest, ['大きく', 'おおきく', '思いっきり', '激し'])) { amount = 80; understood.push('大きく'); }
+    if (has(rest, ['少し', 'ちょっと', '小さく', '軽く'])) { amount = 25; understood.push('少しだけ'); }
+    if (has(rest, ['速', '早く', 'はやく'])) { speed = 3; understood.push('速く'); }
+    if (has(rest, ['ゆっくり', 'のんびり'])) { speed = 1; understood.push('ゆっくり'); }
+    const times = rest.match(/([1-4１-４一二三四])\s*(回|かい|度)/);
+    if (times) { speed = DIGITS[times[1]] || Number(times[1]); understood.push(`${speed}回`); }
+    return { name, only, cfg: { type, amount, speed }, understood };
+  }
+
   const EXAMPLES = ['大きく跳ねる', 'ゆっくり左右にゆれる', '速くぶるぶる震える', 'ドキドキ大きくなる', 'くるくる回る', 'ぺこりとおじぎ', 'ふわふわ浮かぶ', '手を振る'];
 
-  const api = { parseMotionText, parseInstruction, EXAMPLES, WISH_EXAMPLES };
+  const api = { parseMotionText, parseInstruction, parsePartRequest, EXAMPLES, WISH_EXAMPLES };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.MotionWords = api;
 })(typeof window !== 'undefined' ? window : globalThis);

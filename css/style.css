@@ -168,6 +168,14 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .examples { margin-top: 6px; }
 .examples .chip { font-size: 12px; padding: 3px 10px; }
 .fine-tune { border-top: 1px solid var(--line); padding-top: 10px; margin-top: 12px; }
+.parts-panel { margin-top: 12px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--bg); display: grid; gap: 8px; }
+.parts-panel h3 { margin: 0; font-size: 14px; }
+.parts-panel h3 small { font-weight: normal; color: var(--muted); }
+.parts-panel .hint { margin: 0; color: var(--ink); }
+#partsCanvas {
+  width: 100%; max-width: 280px; border-radius: 8px; display: block; touch-action: none; cursor: crosshair;
+  background: repeating-conic-gradient(var(--checker-a) 0 25%, var(--checker-b) 0 50%) 0 0 / 12px 12px;
+}
 .custom-panel { margin-top: 8px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--bg); }
 output { color: var(--ink); font-weight: 700; }
 

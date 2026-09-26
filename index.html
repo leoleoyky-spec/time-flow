@@ -91,6 +91,24 @@
         </div>
       </div>
 
+      <div id="partsPanel" class="parts-panel">
+        <h3>一部分だけ動かす <small>（手をふる など）</small></h3>
+        <p id="partsHint" class="hint"></p>
+        <canvas id="partsCanvas" aria-label="動かす部分をなぞる場所"></canvas>
+        <div class="row-buttons">
+          <button id="partAdd" type="button" class="btn small">動かす部分をなぞる</button>
+          <button id="partRemove" type="button" class="btn small ghost danger">この部分を消す</button>
+        </div>
+        <div id="partTabs" class="chips" role="radiogroup" aria-label="動かす部分"></div>
+        <div id="partControls" hidden>
+          <div id="partType" class="chips" role="radiogroup" aria-label="部分の動き方"></div>
+          <div class="grid2">
+            <label>動きの大きさ<input id="partAmount" type="range" min="10" max="100" step="5"></label>
+            <label>速さ<input id="partSpeed" type="range" min="1" max="4" step="1"></label>
+          </div>
+        </div>
+      </div>
+
       <h2>うごき</h2>
       <div id="motions" class="chips" role="radiogroup" aria-label="うごき"></div>
       <div id="customPanel" class="custom-panel" hidden>
@@ -139,6 +157,7 @@
   <script src="js/animations.js"></script>
   <script src="js/motion-words.js"></script>
   <script src="js/bg-remove.js"></script>
+  <script src="js/parts.js"></script>
   <script src="js/app.js"></script>
 </body>
 </html>

@@ -3,8 +3,9 @@
 
   const { FONTS, MOTIONS, EFFECTS, CUSTOM_WAVES, CUSTOM_PATHS, defaultSticker, drawFrame } = window.Stickers;
   const { assembleAPNG, quantize, encodeIndexedPNG, createZip } = window.Encoder;
-  const { parseMotionText, parseInstruction, EXAMPLES: MOTION_EXAMPLES, WISH_EXAMPLES } = window.MotionWords;
+  const { parseMotionText, parseInstruction, parsePartRequest, EXAMPLES: MOTION_EXAMPLES, WISH_EXAMPLES } = window.MotionWords;
   const { removeBackgroundPixels } = window.BgRemove;
+  const { inpaint, guessPivot, PART_MOTIONS } = window.Parts;
 
   const W = 320;
   const H = 270;
@@ -22,6 +23,7 @@
     const st = { ...defaultSticker(), frames: 12, duration: 1, loops: 4, ...(base || {}) };
     st.custom = { ...defaultSticker().custom, ...st.custom };
     st.bg = { ...defaultSticker().bg, ...st.bg };
+    st.parts = Array.isArray(st.parts) ? st.parts : [];
     // Stickers saved before background removal existed only have `image`.
     if (st.image && !st.originalImage) st.originalImage = st.image;
     st.bg.tolerance = Math.min(st.bg.tolerance, 45);
@@ -63,6 +65,7 @@
         entry.ready = true;
         renderList();
         if (src === current().originalImage) drawBgPickCanvas(src);
+        if (src === current().image) drawPartsCanvas();
       };
       img.src = src;
       imageCache.set(src, entry);
@@ -132,6 +135,218 @@
     return { alreadyTransparent: false, dataUrl: c.toDataURL('image/png') };
   }
 
+  // ---------- moving parts ----------
+  // Cut-out canvases depend only on the picture and the traced outlines, so they are
+  // cached on that; the joint and the motion settings are read live every frame.
+  const layerCache = new Map();
+  function getLayers(st) {
+    if (!st.parts || !st.parts.length) return null;
+    const img = getImage(st.image);
+    if (!img) return null;
+    const key = st.image.length + ':' + st.image.slice(-64) + ':' + JSON.stringify(st.parts.map((p) => p.poly));
+    let built = layerCache.get(key);
+    if (!built) {
+      built = buildLayers(img, st.parts);
+      if (layerCache.size > 30) layerCache.clear();
+      layerCache.set(key, built);
+    }
+    return { base: built.base, parts: st.parts.map((p, i) => ({ canvas: built.canvases[i], pivot: p.pivot, cfg: p.cfg })) };
+  }
+
+  function partMask(poly, w, h) {
+    const c = document.createElement('canvas');
+    c.width = w;
+    c.height = h;
+    const ctx = c.getContext('2d', { willReadFrequently: true });
+    ctx.beginPath();
+    poly.forEach(([x, y], i) => (i ? ctx.lineTo(x * w, y * h) : ctx.moveTo(x * w, y * h)));
+    ctx.closePath();
+    ctx.fill();
+    const a = ctx.getImageData(0, 0, w, h).data;
+    const mask = new Uint8Array(w * h);
+    for (let i = 0; i < w * h; i++) mask[i] = a[i * 4 + 3] > 127 ? 1 : 0;
+    return mask;
+  }
+
+  function buildLayers(img, parts) {
+    const w = img.naturalWidth || img.width;
+    const h = img.naturalHeight || img.height;
+    const src = document.createElement('canvas');
+    src.width = w;
+    src.height = h;
+    const sctx = src.getContext('2d', { willReadFrequently: true });
+    sctx.drawImage(img, 0, 0);
+    const pixels = sctx.getImageData(0, 0, w, h);
+    const union = new Uint8Array(w * h);
+    const canvases = parts.map((part) => {
+      const mask = partMask(part.poly, w, h);
+      const out = new ImageData(w, h);
+      for (let i = 0; i < w * h; i++) {
+        if (!mask[i]) continue;
+        union[i] = 1;
+        out.data.set(pixels.data.subarray(i * 4, i * 4 + 4), i * 4);
+      }
+      const c = document.createElement('canvas');
+      c.width = w;
+      c.height = h;
+      c.getContext('2d').putImageData(out, 0, 0);
+      return c;
+    });
+    inpaint(pixels.data, w, h, union);
+    const base = document.createElement('canvas');
+    base.width = w;
+    base.height = h;
+    base.getContext('2d').putImageData(pixels, 0, 0);
+    return { base, canvases };
+  }
+
+  let partSel = 0;
+  let partMode = 'idle'; // 'idle' | 'draw'
+  let pendingPart = null; // a worded request ("左手だけ振る") waiting for the user to trace the part
+  let stroke = null;
+
+  function partsCanvasRect() {
+    const img = getImage(current().image);
+    const canvas = $('partsCanvas');
+    if (!img) return null;
+    const w = 280;
+    const h = Math.max(1, Math.round((img.height / img.width) * w));
+    if (canvas.width !== w || canvas.height !== h) {
+      canvas.width = w;
+      canvas.height = h;
+    }
+    return { img, canvas, w, h };
+  }
+
+  function drawPartsCanvas() {
+    const r = partsCanvasRect();
+    if (!r) return;
+    const { img, canvas, w, h } = r;
+    const ctx = canvas.getContext('2d');
+    ctx.clearRect(0, 0, w, h);
+    ctx.drawImage(img, 0, 0, w, h);
+    const outline = (poly, color, dashed) => {
+      ctx.save();
+      ctx.beginPath();
+      poly.forEach(([x, y], i) => (i ? ctx.lineTo(x * w, y * h) : ctx.moveTo(x * w, y * h)));
+      ctx.closePath();
+      ctx.setLineDash(dashed ? [5, 4] : []);
+      ctx.lineWidth = 3;
+      ctx.strokeStyle = '#ffffff';
+      ctx.stroke();
+      ctx.lineWidth = 2;
+      ctx.strokeStyle = color;
+      ctx.stroke();
+      ctx.restore();
+    };
+    current().parts.forEach((p, i) => {
+      outline(p.poly, i === partSel ? '#06c755' : '#888888', i !== partSel);
+      if (i === partSel) {
+        ctx.beginPath();
+        ctx.arc(p.pivot[0] * w, p.pivot[1] * h, 7, 0, Math.PI * 2);
+        ctx.fillStyle = '#e5484d';
+        ctx.fill();
+        ctx.lineWidth = 2;
+        ctx.strokeStyle = '#ffffff';
+        ctx.stroke();
+      }
+    });
+    if (stroke && stroke.length > 1) outline(stroke, '#e5484d', false);
+  }
+
+  function syncParts() {
+    const st = current();
+    const hasImg = !!st.image;
+    const parts = st.parts;
+    partSel = Math.min(partSel, Math.max(0, parts.length - 1));
+    $('partsCanvas').hidden = !hasImg;
+    $('partAdd').disabled = !hasImg || parts.length >= 3;
+    $('partAdd').textContent = partMode === 'draw' ? 'なぞるのをやめる' : parts.length ? 'もう1つ部分を追加' : '動かす部分をなぞる';
+    if (partMode === 'draw') $('partAdd').disabled = false;
+    $('partRemove').hidden = !parts.length;
+    let hint;
+    if (!hasImg) hint = '先に「画像を選ぶ」で画像を入れてね';
+    else if (partMode === 'draw') hint = '動かしたい部分（左手など）を、指やマウスでぐるっと囲んでね';
+    else if (!parts.length) hint = '「動かす部分をなぞる」を押して、動かしたい部分を囲むと、そこだけ動かせます';
+    else hint = '赤い点が動きの中心（つけ根）です。ちがう場所をタップすると移せます';
+    $('partsHint').textContent = hint;
+
+    const tabs = $('partTabs');
+    tabs.innerHTML = '';
+    if (parts.length > 1) {
+      parts.forEach((p, i) => {
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.className = 'chip';
+        b.textContent = `部分${i + 1}`;
+        b.setAttribute('role', 'radio');
+        b.setAttribute('aria-checked', String(i === partSel));
+        b.addEventListener('click', () => {
+          partSel = i;
+          syncParts();
+        });
+        tabs.append(b);
+      });
+    }
+    $('partControls').hidden = !parts.length;
+    if (parts.length) {
+      const cfg = parts[partSel].cfg;
+      $('partType').querySelectorAll('.chip').forEach((c) => c.setAttribute('aria-checked', String(c.dataset.value === cfg.type)));
+      $('partAmount').value = cfg.amount;
+      $('partSpeed').value = cfg.speed;
+    }
+    drawPartsCanvas();
+  }
+
+  function addPartFromStroke(poly) {
+    const st = current();
+    const img = getImage(st.image);
+    if (!img || poly.length < 8) return false;
+    const xs = poly.map((p) => p[0]);
+    const ys = poly.map((p) => p[1]);
+    if (Math.max(...xs) - Math.min(...xs) < 0.03 || Math.max(...ys) - Math.min(...ys) < 0.03) return false;
+    // Keep at most ~120 points so saved projects stay small.
+    const step = Math.max(1, Math.ceil(poly.length / 120));
+    const simple = poly.filter((_, i) => i % step === 0).map(([x, y]) => [Math.round(x * 1000) / 1000, Math.round(y * 1000) / 1000]);
+    const w = img.naturalWidth || img.width;
+    const h = img.naturalHeight || img.height;
+    const c = document.createElement('canvas');
+    c.width = w;
+    c.height = h;
+    const ctx = c.getContext('2d', { willReadFrequently: true });
+    ctx.drawImage(img, 0, 0);
+    const pivot = guessPivot(simple, ctx.getImageData(0, 0, w, h).data, w, h, partMask(simple, w, h));
+    const cfg = pendingPart ? { ...pendingPart.cfg } : { type: 'wave', amount: 50, speed: 2 };
+    st.parts.push({ poly: simple, pivot, cfg });
+    partSel = st.parts.length - 1;
+    if (pendingPart) {
+      if (pendingPart.only) st.motion = 'none';
+      setStatus(`「${pendingPart.name}」を${PART_MOTIONS[cfg.type].label.replace(/（.*）/, '')}ように設定しました`);
+      pendingPart = null;
+    }
+    return true;
+  }
+
+  // Apply "左手だけ左右に振る" style words. Returns a message, or null if the text isn't about a part.
+  function applyPartWords(text) {
+    const req = parsePartRequest(text);
+    if (!req) return null;
+    const st = current();
+    if (!st.image) return `先に「画像を選ぶ」で画像を入れてね。そのあと${req.name}を囲むと、そこだけ動かせます`;
+    if (st.parts.length) {
+      Object.assign(st.parts[partSel].cfg, req.cfg);
+      if (req.only) st.motion = 'none';
+      changed();
+      return '読みとった内容：' + req.understood.join('・') + `（部分${partSel + 1}に設定）`;
+    }
+    pendingPart = req;
+    partMode = 'draw';
+    stroke = null;
+    syncParts();
+    $('partsPanel').scrollIntoView({ behavior: 'smooth', block: 'center' });
+    return `${req.name}がどこにあるか、まだわからないよ。下の「一部分だけ動かす」の画像で、${req.name}を指でぐるっと囲んでね。囲むとすぐ動きます`;
+  }
+
   // ---------- rendering ----------
   function stillT(st) {
     if (st.motion === 'typing') return 0.85;
@@ -142,7 +357,7 @@
   function renderSticker(canvas, st, t, w = W, h = H) {
     const ctx = canvas.getContext('2d');
     ctx.setTransform(canvas.width / w, 0, 0, canvas.height / h, 0, 0);
-    drawFrame(ctx, st, t, w, h, getImage(st.image));
+    drawFrame(ctx, st, t, w, h, getImage(st.image), getLayers(st));
   }
 
   const preview = $('preview');
@@ -220,6 +435,18 @@
 
     const applyWish = () => {
       const { changes, understood } = parseInstruction($('wishText').value);
+      const partMsg = applyPartWords($('wishText').value);
+      if (partMsg) {
+        // The motion words describe the part, not the whole sticker.
+        delete changes.motion;
+        delete changes.custom;
+        const { effect, ...fields } = changes;
+        if (effect) setEffect(current(), effect);
+        Object.assign(current(), fields);
+        changed(!!fields.font);
+        $('wishResult').textContent = partMsg;
+        return;
+      }
       const plain = $('wishText').value.trim();
       if (!understood.length && plain && plain.length <= 15) {
         // Nothing to interpret: a short line is most likely the words for the sticker.
@@ -269,6 +496,11 @@
       const text = $('customText').value;
       const st = current();
       st.custom.text = text;
+      const partMsg = applyPartWords(text);
+      if (partMsg) {
+        $('customResult').textContent = partMsg;
+        return;
+      }
       const r = parseMotionText(text);
       if (!r) {
         $('customResult').textContent = text.trim()
@@ -312,6 +544,7 @@
         const st = current();
         st.originalImage = dataUrl;
         st.image = dataUrl;
+        st.parts = [];
         st.bg = { enabled: false, tolerance: 25, color: null, hasBackground: await hasOpaqueCorners(dataUrl) };
         changed();
       } catch (err) {
@@ -322,6 +555,7 @@
       const st = current();
       st.image = null;
       st.originalImage = null;
+      st.parts = [];
       st.bg = { enabled: false, tolerance: 25, color: null };
       changed();
     });
@@ -361,7 +595,7 @@
       select(state.stickers.length - 1);
     });
     $('duplicate').addEventListener('click', () => {
-      const copy = { ...current(), custom: { ...current().custom }, bg: { ...current().bg } };
+      const copy = { ...current(), custom: { ...current().custom }, bg: { ...current().bg }, parts: JSON.parse(JSON.stringify(current().parts)) };
       state.stickers.splice(state.selected + 1, 0, copy);
       select(state.selected + 1);
     });
@@ -376,6 +610,65 @@
         document.querySelectorAll('.bg-switch .chip').forEach((x) => x.classList.toggle('active', x === b));
         document.querySelector('.stage').className = 'stage ' + (b.dataset.bg === 'checker' ? '' : b.dataset.bg);
       });
+    });
+
+    buildChips($('partType'), PART_MOTIONS, (id) => {
+      current().parts[partSel].cfg.type = id;
+      changed();
+    });
+    $('partAmount').addEventListener('input', () => {
+      current().parts[partSel].cfg.amount = Number($('partAmount').value);
+      changed();
+    });
+    $('partSpeed').addEventListener('input', () => {
+      current().parts[partSel].cfg.speed = Number($('partSpeed').value);
+      changed();
+    });
+    $('partAdd').addEventListener('click', () => {
+      partMode = partMode === 'draw' ? 'idle' : 'draw';
+      if (partMode === 'idle') pendingPart = null;
+      stroke = null;
+      syncParts();
+    });
+    $('partRemove').addEventListener('click', () => {
+      current().parts.splice(partSel, 1);
+      partSel = Math.max(0, partSel - 1);
+      changed();
+    });
+
+    // Trace a part (draw mode), or tap to move the joint of the selected part.
+    const pc = $('partsCanvas');
+    const toImage = (e) => {
+      const r = pc.getBoundingClientRect();
+      return [Math.min(1, Math.max(0, (e.clientX - r.left) / r.width)), Math.min(1, Math.max(0, (e.clientY - r.top) / r.height))];
+    };
+    let downAt = null;
+    pc.addEventListener('pointerdown', (e) => {
+      downAt = toImage(e);
+      pc.setPointerCapture(e.pointerId);
+      if (partMode === 'draw') {
+        stroke = [downAt];
+        drawPartsCanvas();
+      }
+    });
+    pc.addEventListener('pointermove', (e) => {
+      if (partMode !== 'draw' || !stroke) return;
+      stroke.push(toImage(e));
+      drawPartsCanvas();
+    });
+    pc.addEventListener('pointerup', (e) => {
+      const at = toImage(e);
+      if (partMode === 'draw' && stroke) {
+        const ok = addPartFromStroke(stroke);
+        stroke = null;
+        if (ok) partMode = 'idle';
+        else setStatus('もう少し大きく、ぐるっと一周囲んでね');
+        changed();
+      } else if (downAt && current().parts.length && Math.hypot(at[0] - downAt[0], at[1] - downAt[1]) < 0.03) {
+        current().parts[partSel].pivot = at;
+        changed();
+      }
+      downAt = null;
     });
 
     $('exportOne').addEventListener('click', exportOne);
@@ -499,6 +792,7 @@
       $('bgTolerance').value = st.bg.tolerance;
       drawBgPickCanvas(st.originalImage);
     }
+    syncParts();
   }
 
   let sizeToken = 0;
@@ -521,6 +815,10 @@
 
   function select(i) {
     state.selected = i;
+    partSel = 0;
+    partMode = 'idle';
+    pendingPart = null;
+    stroke = null;
     $('customResult').textContent = '';
     $('wishResult').textContent = '';
     startTime = performance.now();

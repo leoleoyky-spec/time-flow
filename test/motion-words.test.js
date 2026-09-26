@@ -101,3 +101,26 @@ test('動かさない turns motion off', () => {
 test('every おまかせ example is understood', () => {
   for (const ex of WISH_EXAMPLES) assert.ok(parseInstruction(ex).understood.length >= 3, ex);
 });
+
+const { parsePartRequest } = require('../js/motion-words.js');
+
+test('左手だけ左右に振る is a part request that keeps the rest still', () => {
+  const r = parsePartRequest('パンダの左手だけ左右に振る');
+  assert.strictEqual(r.name, '左手');
+  assert.strictEqual(r.only, true);
+  assert.strictEqual(r.cfg.type, 'wave');
+});
+
+test('part requests read direction, size and speed', () => {
+  assert.strictEqual(parsePartRequest('耳を上下にぴょこぴょこ').cfg.type, 'updown');
+  assert.strictEqual(parsePartRequest('しっぽをぶるぶる').cfg.type, 'shake');
+  const r = parsePartRequest('右手を大きく速く振る');
+  assert.strictEqual(r.cfg.amount, 80);
+  assert.strictEqual(r.cfg.speed, 3);
+  assert.strictEqual(r.only, false);
+});
+
+test('no body part means no part request (大きく跳ねる stays a whole-body motion)', () => {
+  assert.strictEqual(parsePartRequest('大きく跳ねる'), null);
+  assert.strictEqual(parsePartRequest('ぴょんぴょん跳ねる'), null);
+});

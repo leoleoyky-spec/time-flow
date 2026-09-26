@@ -116,6 +116,16 @@
     shake: { label: 'ぶるぶる' },
   };
 
+  // How one traced part (a hand, an ear) moves around its joint.
+  function partMotion(cfg, t, size) {
+    const amount = (cfg.amount || 0) / 100;
+    const phase = t * TAU * (cfg.speed || 1);
+    if (cfg.type === 'updown') return { dx: 0, dy: -Math.abs(Math.sin(phase)) * amount * size * 0.12, rot: 0 };
+    if (cfg.type === 'side') return { dx: Math.sin(phase) * amount * size * 0.1, dy: 0, rot: 0 };
+    if (cfg.type === 'shake') return { dx: 0, dy: 0, rot: waveShape('shake', phase * 3) * amount * 0.15 };
+    return { dx: 0, dy: 0, rot: Math.sin(phase) * amount * 0.6 }; // wave: up to about ±35°
+  }
+
   const CUSTOM_PATHS = {
     line: { label: 'まっすぐ' },
     circle: { label: '円を描く' },
@@ -166,6 +176,7 @@
       effectColor: '#ffd23f',
       custom: { wave: 'smooth', path: 'line', speed: 1, moveX: 0, moveY: 22, rotate: 6, zoom: 6, pause: 0, squash: 0, text: '' },
       bg: { enabled: false, tolerance: 25, color: null }, // color: null = auto-detect from the corners
+      parts: [], // traced parts that move on their own: { poly: [[x,y]...], pivot: [x,y], cfg: {type, amount, speed} } in 0–1 image coords
     };
   }
 
@@ -213,8 +224,10 @@
    * @param {object} sticker
    * @param {number} t  0 <= t < 1
    * @param {HTMLImageElement|null} img  decoded sticker.image
+   * @param {{base: CanvasImageSource, parts: {canvas, pivot: number[], cfg}[]}|null} [layers]
+   *   when some parts of the picture move on their own (see js/parts.js)
    */
-  function drawFrame(ctx, sticker, t, W, H, img) {
+  function drawFrame(ctx, sticker, t, W, H, img, layers) {
     ctx.clearRect(0, 0, W, H);
     ctx.save();
 
@@ -247,7 +260,25 @@
       const s = Math.min(boxW / img.width, imgBoxH / img.height) * sticker.imageScale;
       const iw = img.width * s;
       const ih = img.height * s;
-      ctx.drawImage(img, -iw / 2, y + (imgBoxH - ih) / 2, iw, ih);
+      const x0 = -iw / 2;
+      const y0 = y + (imgBoxH - ih) / 2;
+      if (layers) {
+        // The body with the parts cut out, then each part moving around its joint.
+        ctx.drawImage(layers.base, x0, y0, iw, ih);
+        for (const part of layers.parts) {
+          const m = partMotion(part.cfg, t, ih);
+          const px = x0 + part.pivot[0] * iw;
+          const py = y0 + part.pivot[1] * ih;
+          ctx.save();
+          ctx.translate(px + m.dx, py + m.dy);
+          ctx.rotate(m.rot);
+          ctx.translate(-px, -py);
+          ctx.drawImage(part.canvas, x0, y0, iw, ih);
+          ctx.restore();
+        }
+      } else {
+        ctx.drawImage(img, x0, y0, iw, ih);
+      }
       y += imgBoxH;
     }
 
