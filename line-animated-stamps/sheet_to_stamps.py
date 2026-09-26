@@ -558,7 +558,7 @@ def main(argv=None):
     ap.add_argument("--config", help="動きの指定CSV (name,char,text,fx,frames,seconds,loops)")
     ap.add_argument("-o", "--out", default="output")
     ap.add_argument("--only", type=int, help="この番号のスタンプだけ作る (確認用)")
-    ap.add_argument("--stroke", type=int, default=4, help="白フチの太さ px (0 でフチなし。既定 4)")
+    ap.add_argument("--stroke", type=int, default=0, help="白フチの太さ px (既定 0 = フチなし。4 程度でダークモードでも見やすくなる)")
     args = ap.parse_args(argv)
 
     cols, rows = (int(v) for v in args.grid.lower().split("x"))
