@@ -6,7 +6,7 @@
   const { parseInstruction, parsePartRequests, parsePartMotion, buildSpritePrompt, WISH_EXAMPLES } = window.MotionWords;
   const { removeBackgroundPixels } = window.BgRemove;
   const { guessPivot, buildMesh, findEye, PART_MOTIONS } = window.Parts;
-  const { findGrid, evenGrid, boundingBox, alignFrames, thinFrames, frameCountFor } = window.Sprite;
+  const { findGrid, findStickers, evenGrid, boundingBox, alignFrames, thinFrames, frameCountFor } = window.Sprite;
 
   const W = 320;
   const H = 270;
@@ -754,6 +754,73 @@
     await rebuildFrames();
   }
 
+  // ---------- quick set: one sheet (or several pictures) → a whole set of stickers ----------
+  // Each sticker gets its own motion and effect, like a hand-made set; one tap reshuffles.
+  const LOOKS = [
+    ['bounce', 'sparkle'], ['swing', 'none'], ['pulse', 'hearts'], ['shake', 'lines'],
+    ['float', 'sparkle'], ['jelly', 'none'], ['bounce', 'notes'], ['swing', 'sparkle'],
+    ['pulse', 'none'], ['float', 'hearts'], ['shake', 'sweat'], ['jelly', 'sparkle'],
+  ];
+  let lookOffset = 0;
+  function lookFor(i) {
+    const [motion, effect] = LOOKS[(i + lookOffset) % LOOKS.length];
+    return EFFECTS[effect].color ? { motion, effect, effectColor: EFFECTS[effect].color } : { motion, effect };
+  }
+
+  const isBlank = (st) => !st.image && !st.frameImages.length && (!st.text.trim() || st.text === defaultSticker().text);
+
+  function cropUrl(c, r) {
+    const k = Math.min(1, 640 / Math.max(r.w, r.h));
+    const o = document.createElement('canvas');
+    o.width = Math.max(1, Math.round(r.w * k));
+    o.height = Math.max(1, Math.round(r.h * k));
+    o.getContext('2d').drawImage(c, r.x, r.y, r.w, r.h, 0, 0, o.width, o.height);
+    return o.toDataURL('image/png');
+  }
+
+  async function quickImport(files) {
+    setStatus('スタンプを作っています…');
+    await new Promise((r) => setTimeout(r, 20));
+    const made = [];
+    try {
+      for (const file of files) {
+        const img = await loadImageFile(file);
+        const orig = toCanvas(img, 2000);
+        const clear = toCanvas(img, 2000);
+        const id = pixelsOf(clear);
+        const hadBg = !removeBackgroundPixels(id.data, clear.width, clear.height, { tolerance: 25 }).alreadyTransparent;
+        if (hadBg) clear.getContext('2d').putImageData(id, 0, 0);
+        for (const r of findStickers(id.data, clear.width, clear.height)) {
+          const image = cropUrl(clear, r);
+          made.push({
+            originalImage: hadBg ? cropUrl(orig, r) : image,
+            image,
+            bg: { enabled: hadBg, tolerance: 25, color: null, hasBackground: hadBg },
+          });
+        }
+      }
+    } catch (err) {
+      return setStatus(err.message, true);
+    }
+    if (!made.length) return setStatus('絵が見つかりませんでした', true);
+    const keep = state.stickers.filter((st) => !isBlank(st));
+    const add = made.slice(0, 24 - keep.length);
+    if (!add.length) return setStatus('スタンプは24個までです。「全部消す」で空けてから読み込んでね', true);
+    const base = state.stickers[0];
+    state.stickers = keep.concat(add.map((m, i) => newSticker({ font: base.font, ...m, text: '', ...lookFor(keep.length + i) })));
+    select(keep.length);
+    const over = made.length > add.length ? `（24個までなので残り${made.length - add.length}個は入れていません）` : '';
+    setStatus(`${add.length}個のスタンプを作りました${over}。動きは「うごき」タブで変えられます`);
+  }
+
+  function shuffleLooks() {
+    lookOffset += 1 + Math.floor(Math.random() * (LOOKS.length - 1));
+    state.stickers.forEach((st, i) => {
+      if (!isFrames(st)) Object.assign(st, lookFor(i));
+    });
+    changed();
+  }
+
   function selectedAdj() {
     const st = current();
     return st.frameAdj[Math.min(frameSel, st.frameAdj.length - 1)];
@@ -1200,6 +1267,27 @@
       syncEditor();
     });
 
+    $('quickFiles').addEventListener('change', (e) => {
+      const files = [...e.target.files];
+      e.target.value = '';
+      if (files.length) quickImport(files);
+    });
+    $('shuffleLooks').addEventListener('click', shuffleLooks);
+    let removeAllAt = 0;
+    $('removeAll').addEventListener('click', (e) => {
+      const btn = e.currentTarget;
+      if (Date.now() - removeAllAt > 3000) {
+        removeAllAt = Date.now();
+        btn.textContent = 'もう一度押すと全部消えます';
+        setTimeout(() => (btn.textContent = '全部消す'), 3000);
+        return;
+      }
+      removeAllAt = 0;
+      btn.textContent = '全部消す';
+      state.stickers = [newSticker()];
+      select(0);
+      setStatus('全部消しました');
+    });
     $('add').addEventListener('click', () => {
       const base = current();
       state.stickers.push(newSticker({ font: base.font, color: base.color, strokeColor: base.strokeColor, strokeWidth: base.strokeWidth }));

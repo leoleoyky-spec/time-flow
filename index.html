@@ -24,7 +24,13 @@
           <button id="add" class="btn small">＋ 追加</button>
           <button id="duplicate" class="btn small ghost">複製</button>
           <button id="remove" class="btn small ghost danger">削除</button>
+          <button id="removeAll" class="btn small ghost danger">全部消す</button>
         </div>
+      </div>
+      <div class="quick">
+        <label class="btn file quick-btn">絵をまとめて読み込む<input id="quickFiles" type="file" accept="image/*" multiple></label>
+        <p class="hint">4×4などに並べた1枚の絵でも、1個ずつの絵でもOK。切り分け・背景を透明・動きと飾りまで自動でやります。</p>
+        <button id="shuffleLooks" type="button" class="btn small ghost">動きと飾りを全部おまかせで変える</button>
       </div>
       <ol id="list" class="sticker-list"></ol>
       <p id="countHint" class="hint"></p>

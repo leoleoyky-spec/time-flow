@@ -217,7 +217,33 @@
     return n * Math.ceil(5 / Math.max(1, n));
   }
 
-  const api = { findGrid, evenGrid, boundingBox, alignFrames, thinFrames, frameCountFor };
+  /**
+   * Where each sticker is on a picture that may hold a whole set (like a 4×4 sheet of
+   * different stickers): the drawn area of each grid cell, empty cells left out.
+   * Fewer than 4 cells is taken as one sticker, as a character with its words below
+   * can also leave an empty band across the middle.
+   * `d` must already have a transparent background.
+   * @returns {{x, y, w, h}[]}  in reading order
+   */
+  function findStickers(d, w, h) {
+    const grid = findGrid(d, w, h);
+    const cells = grid && grid.cells.length >= 4 ? grid.cells : [{ x: 0, y: 0, w, h }];
+    const out = [];
+    for (const c of cells) {
+      const sub = new Uint8Array(c.w * c.h * 4);
+      for (let y = 0; y < c.h; y++) sub.set(d.subarray(((c.y + y) * w + c.x) * 4, ((c.y + y) * w + c.x + c.w) * 4), y * c.w * 4);
+      const b = boundingBox(sub, c.w, c.h);
+      // A few stray pixels (a leftover speck of background) are not a sticker.
+      if (!b || b.w * b.h < c.w * c.h * 0.01) continue;
+      const pad = Math.round(Math.max(b.w, b.h) * 0.02);
+      const x0 = Math.max(0, b.x - pad);
+      const y0 = Math.max(0, b.y - pad);
+      out.push({ x: c.x + x0, y: c.y + y0, w: Math.min(c.w, b.x + b.w + pad) - x0, h: Math.min(c.h, b.y + b.h + pad) - y0 });
+    }
+    return out;
+  }
+
+  const api = { findGrid, findStickers, evenGrid, boundingBox, alignFrames, thinFrames, frameCountFor };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.Sprite = api;
 })(typeof window !== 'undefined' ? window : globalThis);

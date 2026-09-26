@@ -91,6 +91,13 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .btn.file { position: relative; overflow: hidden; display: inline-block; }
 .btn.file input { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
 
+.quick {
+  margin-top: 12px; padding: 12px; border-radius: 12px; background: var(--accent-soft);
+  display: flex; flex-direction: column; gap: 8px;
+}
+.quick .hint { margin: 0; }
+.quick-btn { text-align: center; }
+
 .sticker-list {
   list-style: none; margin: 12px 0 0; padding: 0;
   display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px;

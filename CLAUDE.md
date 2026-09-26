@@ -62,6 +62,12 @@ Two features worth knowing about when touching `js/app.js` or `js/animations.js`
   fractions of the sticker size); both drawing and the preview's drag hit-test use it. Text can be
   curved along an arc (`textCurve`, −100 smile … 100 arch) and tilted (`textRotate`).
 
+- **Quick set** (「絵をまとめて読み込む」 in the list panel): the easy path for most users. One
+  picture holding a whole set (e.g. a 4×4 sheet of different stickers) or several pictures:
+  background removed, `findStickers()` in `js/sprite.js` cuts it into trimmed stickers (grids
+  under 4 cells count as one sticker), and each gets a motion + effect from `LOOKS` in
+  `js/app.js`; one tap reshuffles them all. New stickers replace blank ones and cap at 24.
+
 - **Frame art** (`sticker.mode === 'frames'`): for motions the app can't make from one picture
   (walking, winking, anything), an image AI draws the poses. The 画像 tab builds the request to
   paste into ChatGPT/Gemini (`buildSpritePrompt()` in `js/motion-words.js`), and imports the

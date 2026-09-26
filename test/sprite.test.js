@@ -83,3 +83,25 @@ test('a 4×4 sheet is not mistaken for 2×2, nor split between words and charact
   const g = findGrid(d, w, h);
   assert.strictEqual(`${g.cols}x${g.rows}`, '4x4');
 });
+
+const { findStickers } = require('../js/sprite.js');
+
+test('findStickers cuts a 4×4 set into 16 trimmed stickers, skipping empty cells', () => {
+  const w = 400, h = 400;
+  const d = blank(w, h);
+  for (let r = 0; r < 4; r++) for (let c = 0; c < 4; c++) if (r * 4 + c !== 15) rect(d, w, c * 100 + 20, r * 100 + 30, c * 100 + 70, r * 100 + 90);
+  rect(d, w, 390, 390, 392, 392); // a speck in the empty last cell
+  const s = findStickers(d, w, h);
+  assert.strictEqual(s.length, 15);
+  assert.ok(s[5].x >= 118 && s[5].x <= 120 && s[5].w >= 50 && s[5].w <= 54, JSON.stringify(s[5]));
+});
+
+test('findStickers keeps a character with its words below as one sticker', () => {
+  const w = 200, h = 200;
+  const d = blank(w, h);
+  rect(d, w, 40, 10, 160, 120); // character
+  rect(d, w, 30, 150, 170, 190); // words
+  const s = findStickers(d, w, h);
+  assert.strictEqual(s.length, 1);
+  assert.ok(s[0].y <= 10 && s[0].y + s[0].h >= 190);
+});
