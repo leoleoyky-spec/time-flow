@@ -142,3 +142,24 @@ test('parsePartMotion reads a motion without a body part', () => {
   assert.strictEqual(r.cfg.amount, 25);
   assert.strictEqual(parsePartMotion('こんにちは'), null);
 });
+
+test('text shape and place words', () => {
+  let c = parseInstruction('「やったー」を文字をアーチにして右上に').changes;
+  assert.strictEqual(c.textCurve, 50);
+  c = parseInstruction('文字を下に、にっこりの形で斜めに').changes;
+  assert.deepStrictEqual(c.textPos, [0, 0.25]);
+  assert.strictEqual(c.textCurve, -50);
+  assert.strictEqual(c.textRotate, -12);
+  assert.deepStrictEqual(parseInstruction('文字を右上にして').changes.textPos, [0.25, -0.25]);
+});
+
+test('上下 as a motion is not taken as a text position', () => {
+  const c = parseInstruction('上下にふわふわ').changes;
+  assert.ok(!('textPos' in c));
+  assert.strictEqual(c.motion, 'custom');
+});
+
+test('a text position later in the sentence is still read', () => {
+  assert.deepStrictEqual(parseInstruction('「だいすき」を文字をアーチにして上に').changes.textPos, [0, -0.25]);
+  assert.ok(!('textPos' in parseInstruction('「やった」を上下に跳ねる').changes));
+});

@@ -117,6 +117,8 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .stage.dark { background: #1e1e1e; }
 /* Keeps the 320:270 shape while fitting both the column and the window height. */
 .stage canvas { width: auto; height: auto; max-width: min(100%, 480px); max-height: max(200px, calc(100vh - 380px)); display: block; }
+.stage canvas { touch-action: none; }
+.drag-hint { margin: 6px 0 0; text-align: center; font-size: 12px; color: var(--muted); }
 .bg-switch { display: flex; gap: 6px; margin-top: 10px; justify-content: center; }
 
 .chips { display: flex; flex-wrap: wrap; gap: 6px; }

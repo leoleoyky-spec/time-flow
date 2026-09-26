@@ -212,6 +212,36 @@
       rest = rest.replace(size[0], ' ');
     }
 
+    // Text shape and place: 文字をアーチに / にっこりの形に / 文字を右上に / 斜めに
+    if (/アーチ|虹みたい|虹の形|山なり|山形|カーブ|上向きに曲|上に曲/.test(rest)) {
+      changes.textCurve = 50;
+      understood.push('文字をアーチに');
+      rest = rest.replace(/アーチ|虹みたい|虹の形|山なり|山形|カーブ|上向きに曲|上に曲/g, ' ');
+    } else if (/にっこり|笑顔の形|スマイル|U字|下向きに曲|下に曲/.test(rest)) {
+      changes.textCurve = -50;
+      understood.push('文字をにっこりの形に');
+      rest = rest.replace(/にっこり|笑顔の形|スマイル|U字|下向きに曲|下に曲/g, ' ');
+    }
+    // "文字を右上に", or later in the same sentence: "文字をアーチにして上に".
+    let place = rest.match(/(文字|字|もじ)(を|は|が)?(もっと)?((右|左)?(上|下)|右|左|真ん中|まんなか)(に|へ|のほう|側)/);
+    if (!place && /文字|字|もじ/.test(rest)) {
+      const m = rest.match(/(^|[^上下左右])((右|左)?(上|下)|右|左|真ん中|まんなか)(に|へ)(置|寄|移|して|。|、|$)/);
+      if (m) place = [m[0].slice(m[1].length), '', '', '', m[2]];
+    }
+    if (place) {
+      const p = place[4];
+      const x = p.includes('右') ? 0.25 : p.includes('左') ? -0.25 : 0;
+      const y = p.includes('上') ? -0.25 : p.includes('下') ? 0.25 : 0;
+      changes.textPos = [x, y];
+      understood.push(`文字を${p}に`);
+      rest = rest.replace(place[0], ' ');
+    }
+    if (/斜め|ななめ|傾け|かたむけ/.test(rest)) {
+      changes.textRotate = -12;
+      understood.push('文字をななめに');
+      rest = rest.replace(/斜め|ななめ|傾け|かたむけ/g, ' ');
+    }
+
     if (/なめらか|ぬるぬる|ヌルヌル|スムーズ/.test(rest)) {
       changes.frames = 20;
       understood.push('なめらか（20コマ）');

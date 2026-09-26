@@ -225,6 +225,10 @@
       motion: 'bounce',
       effect: 'sparkle',
       effectColor: '#ffd23f',
+      textCurve: 0, // −100 (smile) … 100 (rainbow arch)
+      textRotate: 0, // degrees
+      textPos: [0, 0], // drag offsets as fractions of the sticker size
+      imagePos: [0, 0],
       custom: { wave: 'smooth', path: 'line', speed: 1, moveX: 0, moveY: 22, rotate: 6, zoom: 6, pause: 0, squash: 0, text: '' },
       bg: { enabled: false, tolerance: 25, color: null }, // color: null = auto-detect from the corners
       parts: [], // traced parts that move on their own: { poly: [[x,y]...], pivot: [x,y], cfg: {type, amount, speed} } in 0–1 image coords
@@ -270,6 +274,47 @@
   }
 
   /**
+   * Where the picture and the text sit before any motion, relative to the sticker's
+   * center, including the user's drag offsets. Shared by drawing and by the editor's
+   * drag hit-test so both agree.
+   */
+  function layoutSticker(ctx, sticker, W, H, img) {
+    const innerW = W - MARGIN * 2;
+    const innerH = H - MARGIN * 2;
+    const hasText = sticker.text.trim().length > 0;
+    const hasImage = !!img;
+
+    // Motion can grow the content (bounce, zoom...), so leave head-room.
+    const room = sticker.motion === 'none' || sticker.motion === 'typing' || sticker.motion === 'rainbow' ? 1 : 0.86;
+    const boxW = innerW * room;
+    const boxH = innerH * room;
+
+    // Curved text needs more height than straight text, so start it a little smaller.
+    const curve = Math.abs(sticker.textCurve || 0) / 100;
+    const sized = curve ? { ...sticker, fontSize: Math.round(sticker.fontSize * (1 - 0.3 * curve)) } : sticker;
+    const text = hasText ? layoutText(ctx, sized, boxW, hasImage ? boxH * 0.45 : boxH) : null;
+    const textH = text ? text.height : 0;
+    const imgBoxH = hasImage ? boxH - textH : 0;
+    const top = -(imgBoxH + textH) / 2;
+    const out = { text, image: null, textBox: null };
+
+    if (hasImage) {
+      const s = Math.min(boxW / img.width, imgBoxH / img.height) * sticker.imageScale;
+      const iw = img.width * s;
+      const ih = img.height * s;
+      const [ox, oy] = sticker.imagePos || [0, 0];
+      out.image = { x: -iw / 2 + ox * W, y: top + (imgBoxH - ih) / 2 + oy * H, w: iw, h: ih };
+    }
+    if (text) {
+      ctx.font = `${text.size}px "${sticker.font}", sans-serif`;
+      const width = Math.max(...text.lines.map((l) => ctx.measureText(l).width)) + sticker.strokeWidth * 2;
+      const [ox, oy] = sticker.textPos || [0, 0];
+      out.textBox = { cx: ox * W, cy: top + imgBoxH + textH / 2 + oy * H, w: width, h: textH };
+    }
+    return out;
+  }
+
+  /**
    * Draw one frame of a sticker.
    * @param {CanvasRenderingContext2D} ctx  target in W x H units (caller may pre-scale); cleared first
    * @param {object} sticker
@@ -283,21 +328,7 @@
     ctx.save();
 
     const motion = (MOTIONS[sticker.motion] || MOTIONS.none).fn(t, W, H, sticker);
-    const innerW = W - MARGIN * 2;
-    const innerH = H - MARGIN * 2;
-    const hasText = sticker.text.trim().length > 0;
-    const hasImage = !!img;
-
-    // Motion can grow the content (bounce, zoom...), so leave head-room.
-    const room = sticker.motion === 'none' || sticker.motion === 'typing' || sticker.motion === 'rainbow' ? 1 : 0.86;
-    const boxW = innerW * room;
-    const boxH = innerH * room;
-
-    let text = null;
-    if (hasText) text = layoutText(ctx, sticker, boxW, hasImage ? boxH * 0.45 : boxH);
-
-    const textH = text ? text.height : 0;
-    const imgBoxH = hasImage ? boxH - textH : 0;
+    const lay = layoutSticker(ctx, sticker, W, H, img);
 
     const pivotY = (motion.pivotY || 0) * H;
     ctx.translate(W / 2 + (motion.x || 0), H / 2 + (motion.y || 0) + pivotY);
@@ -306,13 +337,8 @@
     ctx.translate(0, -pivotY);
     ctx.globalAlpha = motion.alpha === undefined ? 1 : Math.max(0, Math.min(1, motion.alpha));
 
-    let y = -(imgBoxH + textH) / 2;
-    if (hasImage) {
-      const s = Math.min(boxW / img.width, imgBoxH / img.height) * sticker.imageScale;
-      const iw = img.width * s;
-      const ih = img.height * s;
-      const x0 = -iw / 2;
-      const y0 = y + (imgBoxH - ih) / 2;
+    if (lay.image) {
+      const { x: x0, y: y0, w: iw, h: ih } = lay.image;
       if (layers) {
         // Everything the parts don't touch, then the touched cells bent like rubber.
         ctx.drawImage(layers.base, x0, y0, iw, ih);
@@ -320,41 +346,80 @@
       } else {
         ctx.drawImage(img, x0, y0, iw, ih);
       }
-      y += imgBoxH;
     }
 
-    if (text) {
-      ctx.font = `${text.size}px "${sticker.font}", sans-serif`;
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.lineJoin = 'round';
-      ctx.miterLimit = 2;
-      const fill = motion.hue !== undefined ? `hsl(${motion.hue}, 90%, 58%)` : sticker.color;
-      const total = text.lines.reduce((n, l) => n + Array.from(l).length, 0);
-      let budget = motion.reveal === undefined ? Infinity : Math.ceil(total * motion.reveal);
-
-      text.lines.forEach((line, i) => {
-        const chars = Array.from(line);
-        const shown = chars.slice(0, Math.max(0, budget)).join('');
-        budget -= chars.length;
-        if (!shown) return;
-        const ly = y + sticker.strokeWidth / 2 + text.lineHeight * (i + 0.5);
-        // Keep partially typed lines anchored where the full line would sit.
-        const fullW = ctx.measureText(line).width;
-        const x = shown === line ? 0 : -fullW / 2 + ctx.measureText(shown).width / 2;
-        if (sticker.strokeWidth > 0) {
-          ctx.strokeStyle = sticker.strokeColor;
-          ctx.lineWidth = sticker.strokeWidth * 2;
-          ctx.strokeText(shown, x, ly);
-        }
-        ctx.fillStyle = fill;
-        ctx.fillText(shown, x, ly);
-      });
-    }
+    if (lay.text) drawText(ctx, sticker, lay.text, lay.textBox, motion);
     ctx.restore();
 
     ctx.save();
     (EFFECTS[sticker.effect] || EFFECTS.none).fn(ctx, t, W, H, sticker.effectColor);
+    ctx.restore();
+  }
+
+  function drawText(ctx, sticker, text, box, motion) {
+    ctx.save();
+    ctx.translate(box.cx, box.cy);
+    ctx.rotate(((sticker.textRotate || 0) * Math.PI) / 180);
+    ctx.font = `${text.size}px "${sticker.font}", sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.lineJoin = 'round';
+    ctx.miterLimit = 2;
+    const fill = motion.hue !== undefined ? `hsl(${motion.hue}, 90%, 58%)` : sticker.color;
+    const total = text.lines.reduce((n, l) => n + Array.from(l).length, 0);
+    let budget = motion.reveal === undefined ? Infinity : Math.ceil(total * motion.reveal);
+    const curve = (sticker.textCurve || 0) / 100;
+
+    // Glyphs to draw, each with a position and an angle; outlines go first for all
+    // of them so one letter's outline never covers its neighbour's fill.
+    const glyphs = [];
+    text.lines.forEach((line, i) => {
+      const chars = Array.from(line);
+      const count = Math.max(0, Math.min(chars.length, budget));
+      budget -= chars.length;
+      if (!count) return;
+      const ly = -box.h / 2 + sticker.strokeWidth / 2 + text.lineHeight * (i + 0.5);
+      const fullW = ctx.measureText(line).width;
+      if (!curve) {
+        const shown = chars.slice(0, count).join('');
+        // Keep partially typed lines anchored where the full line would sit.
+        const x = count === chars.length ? 0 : -fullW / 2 + ctx.measureText(shown).width / 2;
+        glyphs.push({ ch: shown, x, y: ly, a: 0 });
+        return;
+      }
+      // Bend the line along a circle: + arches up like a rainbow, − sags like a smile.
+      const span = Math.abs(curve) * Math.PI; // angle the whole line covers
+      const r = fullW / span;
+      const dir = curve > 0 ? 1 : -1;
+      const sag = r * (1 - Math.cos(span / 2)); // keep the arc centered on the line
+      let s = -fullW / 2;
+      chars.forEach((ch, n) => {
+        const cw = ctx.measureText(ch).width;
+        const theta = (s + cw / 2) / r;
+        s += cw;
+        if (n >= count) return;
+        glyphs.push({
+          ch,
+          x: r * Math.sin(theta),
+          y: ly + dir * (r - r * Math.cos(theta) - sag / 2),
+          a: dir * theta,
+        });
+      });
+    });
+    const each = (fn) => glyphs.forEach((g) => {
+      ctx.save();
+      ctx.translate(g.x, g.y);
+      ctx.rotate(g.a);
+      fn(g.ch);
+      ctx.restore();
+    });
+    if (sticker.strokeWidth > 0) {
+      ctx.strokeStyle = sticker.strokeColor;
+      ctx.lineWidth = sticker.strokeWidth * 2;
+      each((ch) => ctx.strokeText(ch, 0, 0));
+    }
+    ctx.fillStyle = fill;
+    each((ch) => ctx.fillText(ch, 0, 0));
     ctx.restore();
   }
 
@@ -504,5 +569,5 @@
     return x - Math.floor(x);
   }
 
-  root.Stickers = { FONTS, MOTIONS, EFFECTS, CUSTOM_WAVES, CUSTOM_PATHS, defaultSticker, drawFrame };
+  root.Stickers = { FONTS, MOTIONS, EFFECTS, CUSTOM_WAVES, CUSTOM_PATHS, defaultSticker, drawFrame, layoutSticker };
 })(window);

@@ -1,7 +1,7 @@
 (function () {
   'use strict';
 
-  const { FONTS, MOTIONS, EFFECTS, CUSTOM_WAVES, CUSTOM_PATHS, defaultSticker, drawFrame } = window.Stickers;
+  const { FONTS, MOTIONS, EFFECTS, CUSTOM_WAVES, CUSTOM_PATHS, defaultSticker, drawFrame, layoutSticker } = window.Stickers;
   const { assembleAPNG, quantize, encodeIndexedPNG, createZip } = window.Encoder;
   const { parseMotionText, parseInstruction, parsePartRequests, parsePartMotion, EXAMPLES: MOTION_EXAMPLES, WISH_EXAMPLES } = window.MotionWords;
   const { removeBackgroundPixels } = window.BgRemove;
@@ -447,8 +447,8 @@
   }
 
   // ---------- editor ----------
-  const fields = ['text', 'font', 'fontSize', 'color', 'strokeColor', 'strokeWidth', 'imageScale', 'effectColor', 'frames', 'duration', 'loops'];
-  const numeric = new Set(['fontSize', 'strokeWidth', 'imageScale', 'frames', 'duration', 'loops']);
+  const fields = ['text', 'font', 'fontSize', 'color', 'strokeColor', 'strokeWidth', 'textCurve', 'textRotate', 'imageScale', 'effectColor', 'frames', 'duration', 'loops'];
+  const numeric = new Set(['fontSize', 'strokeWidth', 'textCurve', 'textRotate', 'imageScale', 'frames', 'duration', 'loops']);
 
   const CUSTOM_SLIDERS = { customSpeed: 'speed', customMoveX: 'moveX', customMoveY: 'moveY', customRotate: 'rotate', customZoom: 'zoom', customSquash: 'squash', customPause: 'pause' };
 
@@ -633,7 +633,7 @@
       select(state.stickers.length - 1);
     });
     $('duplicate').addEventListener('click', () => {
-      const copy = { ...current(), custom: { ...current().custom }, bg: { ...current().bg }, parts: JSON.parse(JSON.stringify(current().parts)) };
+      const copy = { ...JSON.parse(JSON.stringify(current())) };
       state.stickers.splice(state.selected + 1, 0, copy);
       select(state.selected + 1);
     });
@@ -726,6 +726,58 @@
         $('miniPreview').hidden = entry.isIntersecting;
       }, { threshold: 0.35 }).observe(document.querySelector('.stage'));
     }
+
+    // Drag the text or the picture around on the big preview.
+    const pv = $('preview');
+    const toSticker = (e) => {
+      const r = pv.getBoundingClientRect();
+      return [((e.clientX - r.left) / r.width) * W - W / 2, ((e.clientY - r.top) / r.height) * H - H / 2];
+    };
+    const hitAt = (pt) => {
+      const st = current();
+      const ctx = pv.getContext('2d');
+      ctx.save();
+      const lay = layoutSticker(ctx, st, W, H, getImage(st.image));
+      ctx.restore();
+      const pad = 8;
+      const b = lay.textBox;
+      if (b && Math.abs(pt[0] - b.cx) <= b.w / 2 + pad && Math.abs(pt[1] - b.cy) <= b.h / 2 + pad) return 'textPos';
+      const im = lay.image;
+      if (im && pt[0] >= im.x - pad && pt[0] <= im.x + im.w + pad && pt[1] >= im.y - pad && pt[1] <= im.y + im.h + pad) return 'imagePos';
+      return null;
+    };
+    let drag = null;
+    pv.addEventListener('pointerdown', (e) => {
+      const pt = toSticker(e);
+      const what = hitAt(pt);
+      if (!what) return;
+      drag = { what, from: pt, start: [...(current()[what] || [0, 0])] };
+      pv.setPointerCapture(e.pointerId);
+      pv.style.cursor = 'grabbing';
+      e.preventDefault();
+    });
+    pv.addEventListener('pointermove', (e) => {
+      const pt = toSticker(e);
+      if (!drag) {
+        pv.style.cursor = hitAt(pt) ? 'grab' : '';
+        return;
+      }
+      const clamp = (v) => Math.max(-0.5, Math.min(0.5, v));
+      // Only the preview redraws while dragging; the rest updates on release.
+      current()[drag.what] = [clamp(drag.start[0] + (pt[0] - drag.from[0]) / W), clamp(drag.start[1] + (pt[1] - drag.from[1]) / H)];
+    });
+    const endDrag = () => {
+      if (!drag) return;
+      drag = null;
+      pv.style.cursor = '';
+      changed();
+    };
+    pv.addEventListener('pointerup', endDrag);
+    pv.addEventListener('pointercancel', endDrag);
+    $('resetLayout').addEventListener('click', () => {
+      Object.assign(current(), { textPos: [0, 0], imagePos: [0, 0], textCurve: 0, textRotate: 0 });
+      changed();
+    });
 
     $('exportOne').addEventListener('click', exportOne);
     $('exportZip').addEventListener('click', exportZip);

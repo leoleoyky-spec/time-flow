@@ -51,6 +51,11 @@ Two features worth knowing about when touching `js/app.js` or `js/animations.js`
   The app can't find a hand by itself (that would need AI image recognition), so worded part
   requests (`parsePartRequests()`, several per sentence) queue each untraced part for tracing.
 
+- **Text and picture layout**: `layoutSticker()` in `js/animations.js` is the single source of
+  where the picture and text sit (including the user's drag offsets `textPos`/`imagePos`, as
+  fractions of the sticker size); both drawing and the preview's drag hit-test use it. Text can be
+  curved along an arc (`textCurve`, −100 smile … 100 arch) and tilted (`textRotate`).
+
 ## Development Workflow
 
 ### Branch Naming

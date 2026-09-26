@@ -34,6 +34,7 @@
       <div class="stage">
         <canvas id="preview" width="640" height="540" aria-label="スタンプのプレビュー"></canvas>
       </div>
+      <p class="drag-hint">文字や絵はドラッグで動かせます</p>
       <div class="bg-switch" role="group" aria-label="プレビュー背景">
         <button data-bg="checker" class="chip active">透明</button>
         <button data-bg="line" class="chip">トーク画面</button>
@@ -82,7 +83,11 @@
         <label class="color">文字色<input id="color" type="color"></label>
         <label class="color">フチ色<input id="strokeColor" type="color"></label>
         <label>フチの太さ<input id="strokeWidth" type="range" min="0" max="16" step="1"></label>
+        <label>文字の曲がり <small>（右でアーチ・左でにっこり）</small><input id="textCurve" type="range" min="-100" max="100" step="5"></label>
+        <label>文字の傾き<input id="textRotate" type="range" min="-30" max="30" step="1"></label>
       </div>
+      <p class="hint">プレビューの文字や絵は、指やマウスでドラッグして好きな場所に動かせます。</p>
+      <button id="resetLayout" type="button" class="btn small ghost">文字と絵の位置・曲がりを元に戻す</button>
 
       </div>
 
