@@ -136,6 +136,7 @@ python sheet_to_stamps.py panda/sheet.webp --grid 4x4 --config panda/motions.csv
 - 集中線・キラキラ・ハート・紙吹雪・光線などのエフェクトを重ねます
 - 1個あたり20コマ（1秒×3回、または2秒×2回）で、仕様チェックとZIP作成まで行います
 - `--only 3` を付けると3番だけ作り直せます（動きを調整するとき用）
+- `--stroke 0` を付けると白フチなしになります（既定は4px。LINEのダークモードで見やすくするためのフチです）
 
 `motions.csv` で、1行ごとに動きを指定します（`name,char,text,fx,frames,seconds,loops`）。
 

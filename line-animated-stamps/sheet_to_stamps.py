@@ -136,7 +136,7 @@ def cut_cell(cell, stroke=4):
     for a in (text_a, char_a):
         lay = cell.convert("RGBA")
         lay.putalpha(a)
-        layers.append(_white_edge(lay, stroke))
+        layers.append(_white_edge(lay, stroke) if stroke > 0 else lay)
     return layers
 
 
@@ -464,8 +464,8 @@ FX = {"burst": f_burst, "sparkles": f_sparkles, "twinkle": f_twinkle, "hearts": 
 # ---- 1コマの合成 ------------------------------------------------------------
 
 class Stamp:
-    def __init__(self, cell):
-        text, char = cut_cell(cell)
+    def __init__(self, cell, stroke=4):
+        text, char = cut_cell(cell, stroke)
         self.text_src, self.char_src = text, char
         tb, cb = text.getbbox(), char.getbbox()
         boxes = [b for b in (tb, cb) if b]
@@ -558,6 +558,7 @@ def main(argv=None):
     ap.add_argument("--config", help="動きの指定CSV (name,char,text,fx,frames,seconds,loops)")
     ap.add_argument("-o", "--out", default="output")
     ap.add_argument("--only", type=int, help="この番号のスタンプだけ作る (確認用)")
+    ap.add_argument("--stroke", type=int, default=4, help="白フチの太さ px (0 でフチなし。既定 4)")
     args = ap.parse_args(argv)
 
     cols, rows = (int(v) for v in args.grid.lower().split("x"))
@@ -579,7 +580,7 @@ def main(argv=None):
         if args.only and args.only != i + 1:
             continue
         cell = sheet.crop((round(c * cw), round(r * ch), round((c + 1) * cw), round((r + 1) * ch)))
-        stamp = Stamp(cell)
+        stamp = Stamp(cell, args.stroke)
         folder.mkdir(parents=True, exist_ok=True)
         for old in folder.glob("*.png"):
             old.unlink()
