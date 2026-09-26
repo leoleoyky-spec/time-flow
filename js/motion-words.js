@@ -286,7 +286,8 @@
 
   // ---- one part only ("左手だけ左右に振る") ----
 
-  const BODY_PARTS = ['左手', '右手', '両手', '左腕', '右腕', '手', '腕', '左耳', '右耳', '耳', 'しっぽ', '尻尾', 'シッポ',
+  const WINK = /ウインク|ウィンク|まばたき|瞬き|目を?(閉じ|とじ|つぶ|つむ)/;
+  const BODY_PARTS = ['左目', '右目', '両目', '左手', '右手', '両手', '左腕', '右腕', '手', '腕', '左耳', '右耳', '耳', 'しっぽ', '尻尾', 'シッポ',
     '頭', 'あたま', '顔', '足', 'あし', '羽', 'はね', 'ほっぺ', '目', 'リボン', '帽子', 'マグカップ', 'カップ'];
 
   /**
@@ -297,13 +298,15 @@
     const t = String(text || '');
     let type = null;
     let label = '';
-    if (/上下|ぴょこ|ピョコ|跳ね|はね|うなず/.test(t)) { type = 'updown'; label = '上下にうごく'; }
+    if (WINK.test(t)) { type = 'wink'; label = 'ウインク'; }
+    else if (/上下|ぴょこ|ピョコ|跳ね|はね|うなず/.test(t)) { type = 'updown'; label = '上下にうごく'; }
     else if (/震|ぶるぶる|ブルブル|ぷるぷる|プルプル/.test(t)) { type = 'shake'; label = 'ぶるぶる'; }
     else if (/横に|スライド|左右にうごく|左右に動く/.test(t)) { type = 'side'; label = '左右にうごく'; }
     else if (/振|ふる|ふっ|フリフリ|バイバイ|左右|パタパタ|ぱたぱた|ゆら|揺|動/.test(t)) { type = 'wave'; label = 'ふる'; }
 
-    let amount = 50;
-    let speed = 2;
+    // A wink closes the eye fully, once per loop, unless told otherwise.
+    let amount = type === 'wink' ? 100 : 50;
+    let speed = type === 'wink' ? 1 : 2;
     const understood = label ? [label] : [];
     if (has(t, ['大きく', 'おおきく', '思いっきり', '激し'])) { amount = 80; understood.push('大きく'); }
     if (has(t, ['少し', 'ちょっと', '小さく', '軽く', 'そっと'])) { amount = 25; understood.push('少しだけ'); }
@@ -332,6 +335,8 @@
       hits.push([i, name]);
       i += name.length - 1;
     }
+    // "ウインクして" names no part, but can only mean an eye.
+    if (!hits.length && WINK.test(t)) hits.push([0, '目']);
     const only = /だけ|のみ|以外は?(動かさない|止め)/.test(t);
     return hits.map(([at, name], n) => {
       const seg = t.slice(at + name.length, n + 1 < hits.length ? hits[n + 1][0] : t.length);

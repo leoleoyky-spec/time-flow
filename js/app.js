@@ -5,7 +5,7 @@
   const { assembleAPNG, quantize, encodeIndexedPNG, createZip } = window.Encoder;
   const { parseInstruction, parsePartRequests, parsePartMotion, WISH_EXAMPLES } = window.MotionWords;
   const { removeBackgroundPixels } = window.BgRemove;
-  const { guessPivot, buildMesh, PART_MOTIONS } = window.Parts;
+  const { guessPivot, buildMesh, findEye, PART_MOTIONS } = window.Parts;
 
   const W = 320;
   const H = 270;
@@ -136,38 +136,100 @@
   }
 
   // ---------- moving parts ----------
-  // The bend grid depends on the picture, the traced outlines and the joints, so it
-  // is cached on those; the motion settings are read live every frame.
+  // The bend grid depends on the picture, the traced outlines, the joints and whether
+  // a part is a wink, so it is cached on those; the rest is read live every frame.
   const layerCache = new Map();
   function getLayers(st) {
     if (!st.parts || !st.parts.length) return null;
     const img = getImage(st.image);
     if (!img) return null;
-    const key = st.image.length + ':' + st.image.slice(-64) + ':' + JSON.stringify(st.parts.map((p) => [p.poly, p.pivot]));
+    const key = st.image.length + ':' + st.image.slice(-64) + ':' + JSON.stringify(st.parts.map((p) => [p.poly, p.pivot, p.cfg.type === 'wink']));
     let built = layerCache.get(key);
     if (!built) {
       built = buildLayers(img, st.parts);
       if (layerCache.size > 30) layerCache.clear();
       layerCache.set(key, built);
     }
-    return { img, base: built.base, mesh: built.mesh, parts: st.parts };
+    return {
+      img: built.img,
+      base: built.base,
+      mesh: built.mesh,
+      parts: built.bendIdx.map((i) => st.parts[i]),
+      winks: built.eyes.map((e) => ({ ...e, cfg: st.parts[e.idx].cfg })),
+    };
   }
 
-  // The base is the picture with the cells that will be bent cleared out,
-  // so the unbent copy of the hand never shows behind the moving one.
+  // Bending parts (hands, ears) are drawn through a mesh; winking eyes are found
+  // inside their traced area, painted over with the skin around them, and drawn
+  // separately each frame. The base is that picture with the bent cells cleared out,
+  // so the unbent copy of a hand never shows behind the moving one.
   function buildLayers(img, parts) {
     const w = img.naturalWidth || img.width;
     const h = img.naturalHeight || img.height;
-    const mesh = buildMesh(w, h, parts);
+    const src = document.createElement('canvas');
+    src.width = w;
+    src.height = h;
+    const sctx = src.getContext('2d', { willReadFrequently: true });
+    sctx.drawImage(img, 0, 0);
+    const pixels = sctx.getImageData(0, 0, w, h);
+    const eyes = [];
+    const bendIdx = [];
+    parts.forEach((p, idx) => {
+      if (p.cfg.type !== 'wink') {
+        bendIdx.push(idx);
+        return;
+      }
+      const eye = findEye(pixels.data, w, h, partMask(p.poly, w, h));
+      if (!eye) return;
+      const [x0, y0, x1, y1] = eye.box;
+      const pad = 3;
+      const bx = Math.max(0, x0 - pad);
+      const by = Math.max(0, y0 - pad);
+      const bw = Math.min(w, x1 + pad) - bx;
+      const bh = Math.min(h, y1 + pad) - by;
+      const eyeImg = new ImageData(bw, bh);
+      for (let y = 0; y < bh; y++) {
+        for (let x = 0; x < bw; x++) {
+          const i = (by + y) * w + bx + x;
+          if (!eye.mask[i]) continue;
+          eyeImg.data.set(pixels.data.subarray(i * 4, i * 4 + 4), (y * bw + x) * 4);
+          pixels.data.set([...eye.skin, pixels.data[i * 4 + 3]], i * 4);
+        }
+      }
+      const canvas = document.createElement('canvas');
+      canvas.width = bw;
+      canvas.height = bh;
+      canvas.getContext('2d').putImageData(eyeImg, 0, 0);
+      eyes.push({ idx, canvas, x: bx, y: by, box: eye.box, color: eye.color });
+    });
+    sctx.putImageData(pixels, 0, 0);
+
+    const bendParts = bendIdx.map((i) => parts[i]);
+    const mesh = buildMesh(w, h, bendParts);
     const base = document.createElement('canvas');
     base.width = w;
     base.height = h;
     const ctx = base.getContext('2d');
-    ctx.drawImage(img, 0, 0);
+    ctx.drawImage(src, 0, 0);
+    // Leave a 1px sliver of the original along the outer edge of the bent area (where
+    // the bend is ~0) so its seam with the untouched picture can't show a hairline.
+    const bent = new Set();
+    for (let c = 0; c < mesh.cells.length; c += 2) bent.add(mesh.cells[c] + ',' + mesh.cells[c + 1]);
+    const has = (i, j) => bent.has(i + ',' + j);
     for (let c = 0; c < mesh.cells.length; c += 2) {
-      ctx.clearRect(mesh.cells[c] * mesh.cell, mesh.cells[c + 1] * mesh.cell, mesh.cell, mesh.cell);
+      const i = mesh.cells[c];
+      const j = mesh.cells[c + 1];
+      const l = has(i - 1, j) ? 0 : 1;
+      const r = has(i + 1, j) ? 0 : 1;
+      const t = has(i, j - 1) ? 0 : 1;
+      const b = has(i, j + 1) ? 0 : 1;
+      ctx.clearRect(i * mesh.cell + l, j * mesh.cell + t, mesh.cell - l - r, mesh.cell - t - b);
     }
-    return { base, mesh };
+    return { img: src, base, mesh, bendIdx, eyes };
+  }
+
+  function polyCenter(poly) {
+    return [poly.reduce((a, p) => a + p[0], 0) / poly.length, poly.reduce((a, p) => a + p[1], 0) / poly.length];
   }
 
   function partMask(poly, w, h) {
@@ -305,8 +367,12 @@
     const pivot = guessPivot(simple, ctx.getImageData(0, 0, w, h).data, w, h, partMask(simple, w, h));
     const req = pendingParts.shift();
     const cfg = req ? { ...req.cfg } : { type: 'wave', amount: 50, speed: 2 };
-    st.parts.push({ name: req ? req.name : `部分${st.parts.length + 1}`, poly: simple, pivot, cfg });
+    // An eye closes around its own middle rather than swinging from a joint.
+    st.parts.push({ name: req ? req.name : `部分${st.parts.length + 1}`, poly: simple, pivot: cfg.type === 'wink' ? polyCenter(simple) : pivot, cfg });
     partSel = st.parts.length - 1;
+    if (cfg.type === 'wink' && !findEye(ctx.getImageData(0, 0, w, h).data, w, h, partMask(simple, w, h))) {
+      setStatus('囲んだ中に目（黒っぽいところ）が見つかりませんでした');
+    }
     if (req) {
       if (req.only) st.motion = 'none';
       setStatus(`「${req.name}」を設定しました：${req.understood.slice(1).join('・')}`);
@@ -331,6 +397,7 @@
       const j = i >= 0 ? i : st.parts.length === 1 && /^部分\d$/.test(st.parts[0].name || '部分1') && !queue.length && !done.length ? 0 : -1;
       if (j >= 0) {
         Object.assign(st.parts[j].cfg, req.cfg);
+        if (req.cfg.type === 'wink') st.parts[j].pivot = polyCenter(st.parts[j].poly);
         st.parts[j].name = req.name;
         if (req.only) st.motion = 'none';
         partSel = j;
@@ -379,6 +446,7 @@
       return;
     }
     Object.assign(st.parts[partSel].cfg, m.cfg);
+    if (m.cfg.type === 'wink') st.parts[partSel].pivot = polyCenter(st.parts[partSel].poly);
     changed();
     $('partResult').textContent = `${st.parts[partSel].name || '部分' + (partSel + 1)}：` + m.understood.join('・');
   }
@@ -602,6 +670,10 @@
 
     buildChips($('partType'), PART_MOTIONS, (id) => {
       current().parts[partSel].cfg.type = id;
+      if (id === 'wink') {
+        current().parts[partSel].pivot = polyCenter(current().parts[partSel].poly);
+        Object.assign(current().parts[partSel].cfg, { amount: 100, speed: 1 });
+      }
       changed();
     });
     $('partAmount').addEventListener('input', () => {

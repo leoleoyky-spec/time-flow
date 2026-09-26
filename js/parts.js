@@ -103,7 +103,7 @@
 
   /**
    * A part's motion at time t (0–1): rotation in radians around its joint, and a
-   * shift as a fraction of the picture's height.
+   * shift as a fraction of the picture's height. (Winks are drawn differently: see findEye.)
    */
   function partTransform(cfg, t) {
     const amount = (cfg.amount || 0) / 100;
@@ -182,14 +182,109 @@
     return [nx, ny];
   }
 
+  /**
+   * How closed a winking eye is at time t (0 open … 1 shut): a quick close and
+   * reopen once per loop (or `speed` times).
+   */
+  function winkClose(cfg, t) {
+    const k = (t * (cfg.speed || 1)) % 1;
+    return k < 0.4 || k > 0.65 ? 0 : Math.sin((Math.PI * (k - 0.4)) / 0.25);
+  }
+
+  /**
+   * Find the eye inside a traced area: the biggest connected patch of dark pixels.
+   * Also measures the skin around it, so the eye can be painted over when it shuts.
+   * Squashing the whole traced area instead would drag a nearby mouth or cheek along.
+   * @param {Uint8Array} mask  1 = inside the traced area
+   * @returns {null | {mask: Uint8Array, box: number[], color: number[], skin: number[]}}
+   *   `mask` covers the eye plus its soft edge; `box` is [x0, y0, x1, y1] in pixels.
+   */
+  function findEye(d, w, h, mask) {
+    const n = w * h;
+    const lum = (i) => 0.3 * d[i * 4] + 0.59 * d[i * 4 + 1] + 0.11 * d[i * 4 + 2];
+    let dark = null;
+    for (const limit of [100, 150]) {
+      dark = new Uint8Array(n);
+      let any = false;
+      for (let i = 0; i < n; i++) if (mask[i] && d[i * 4 + 3] > 128 && lum(i) < limit) { dark[i] = 1; any = true; }
+      if (any) break;
+      dark = null;
+    }
+    if (!dark) return null;
+
+    // Largest connected dark patch.
+    const label = new Int32Array(n);
+    let best = 0, bestSize = 0, next = 1;
+    for (let i = 0; i < n; i++) {
+      if (!dark[i] || label[i]) continue;
+      const id = next++;
+      let size = 0;
+      const stack = [i];
+      label[i] = id;
+      while (stack.length) {
+        const j = stack.pop();
+        size++;
+        const x = j % w;
+        for (const k of [x > 0 ? j - 1 : -1, x < w - 1 ? j + 1 : -1, j - w, j + w]) {
+          if (k >= 0 && k < n && dark[k] && !label[k]) { label[k] = id; stack.push(k); }
+        }
+      }
+      if (size > bestSize) { bestSize = size; best = id; }
+    }
+
+    // The eye plus a 2px soft edge, and a ring a few px further out for the skin color.
+    const eye = new Uint8Array(n);
+    for (let i = 0; i < n; i++) if (label[i] === best) eye[i] = 1;
+    const grow = (m, r) => {
+      const out = new Uint8Array(n);
+      for (let i = 0; i < n; i++) {
+        if (!m[i]) continue;
+        const x = i % w, y = (i / w) | 0;
+        for (let dy = -r; dy <= r; dy++) for (let dx = -r; dx <= r; dx++) {
+          const xx = x + dx, yy = y + dy;
+          if (xx >= 0 && yy >= 0 && xx < w && yy < h) out[yy * w + xx] = 1;
+        }
+      }
+      return out;
+    };
+    const soft = grow(eye, 2);
+    const ring = grow(soft, 3);
+    let x0 = w, y0 = h, x1 = 0, y1 = 0;
+    const color = [0, 0, 0];
+    let ce = 0;
+    const around = [];
+    for (let i = 0; i < n; i++) {
+      const o = i * 4;
+      if (eye[i]) {
+        const x = i % w, y = (i / w) | 0;
+        if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y;
+        color[0] += d[o]; color[1] += d[o + 1]; color[2] += d[o + 2]; ce++;
+      } else if (ring[i] && !soft[i] && d[o + 3] > 128) {
+        around.push(i);
+      }
+    }
+    // Skin = the brighter half of the ring, so a cheek blush or outline next to
+    // the eye doesn't tint the patch that covers it.
+    around.sort((a, b) => lum(b) - lum(a));
+    const keep = around.slice(0, Math.max(1, Math.ceil(around.length / 2)));
+    const skin = [0, 1, 2].map((c) => Math.round(keep.reduce((sum, i) => sum + d[i * 4 + c], 0) / keep.length));
+    return {
+      mask: soft,
+      box: [x0, y0, x1 + 1, y1 + 1],
+      color: color.map((v) => Math.round(v / (ce || 1))),
+      skin: around.length ? skin : [255, 255, 255],
+    };
+  }
+
   const PART_MOTIONS = {
     wave: { label: '手をふる（左右にふる）' },
     updown: { label: '上下にうごく' },
     side: { label: '左右にうごく' },
     shake: { label: 'ぶるぶる' },
+    wink: { label: 'ウインク（目をとじる）' },
   };
 
-  const api = { guessPivot, partWeight, partTransform, buildMesh, deformVertex, PART_MOTIONS };
+  const api = { guessPivot, partWeight, partTransform, buildMesh, deformVertex, winkClose, findEye, PART_MOTIONS };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.Parts = api;
 })(typeof window !== 'undefined' ? window : globalThis);

@@ -50,3 +50,26 @@ test('bending moves the part, leaves far pixels alone, and keeps the joint fixed
   // Only cells near the part are bent.
   assert.ok(mesh.cells.length / 2 < mesh.cols * mesh.rows / 2);
 });
+
+test('winkClose shuts the eye once per loop and is open otherwise', () => {
+  const { winkClose } = require('../js/parts.js');
+  const cfg = { type: 'wink', amount: 100, speed: 1 };
+  assert.strictEqual(winkClose(cfg, 0), 0);
+  assert.ok(winkClose(cfg, 0.525) > 0.99);
+  assert.strictEqual(winkClose(cfg, 0.9), 0);
+});
+
+test('findEye picks the dark eye inside a loose trace and ignores the mouth edge', () => {
+  const { findEye } = require('../js/parts.js');
+  const w = 60, h = 60;
+  const d = new Uint8Array(w * h * 4);
+  for (let i = 0; i < w * h; i++) d.set([250, 250, 250, 255], i * 4); // white face
+  for (let y = 20; y < 30; y++) for (let x = 25; x < 37; x++) d.set([40, 25, 15, 255], (y * w + x) * 4); // eye
+  for (let y = 36; y < 40; y++) for (let x = 12; x < 16; x++) d.set([40, 25, 15, 255], (y * w + x) * 4); // bit of mouth
+  const mask = new Uint8Array(w * h);
+  for (let y = 12; y < 42; y++) for (let x = 10; x < 45; x++) mask[y * w + x] = 1; // loose trace
+  const eye = findEye(d, w, h, mask);
+  assert.deepStrictEqual(eye.box, [25, 20, 37, 30]);
+  assert.deepStrictEqual(eye.skin, [250, 250, 250]);
+  assert.strictEqual(eye.mask[37 * w + 13], 0, 'the mouth must not be part of the eye');
+});

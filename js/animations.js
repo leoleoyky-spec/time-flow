@@ -144,8 +144,35 @@
     }
   }
 
+  // Draw each winking eye: open, squashed on the way, then a closed-eye arc "︵"
+  // in the eye's own color (the eye itself was painted over in the base).
+  function drawWinks(ctx, layers, t, x0, y0, k) {
+    for (const e of layers.winks) {
+      const close = root.Parts.winkClose(e.cfg, t);
+      const [bx0, by0, bx1, by1] = e.box;
+      const cx = x0 + ((bx0 + bx1) / 2) * k;
+      const cy = y0 + ((by0 + by1) / 2) * k;
+      const ew = (bx1 - bx0) * k;
+      const eh = (by1 - by0) * k;
+      if (close < 0.7) {
+        const sy = 1 - close;
+        ctx.drawImage(e.canvas, x0 + e.x * k, cy + (y0 + e.y * k - cy) * sy, e.canvas.width * k, e.canvas.height * k * sy);
+        continue;
+      }
+      ctx.save();
+      ctx.strokeStyle = `rgb(${e.color.join(',')})`;
+      ctx.lineWidth = Math.max(1.5, eh * 0.28);
+      ctx.lineCap = 'round';
+      ctx.beginPath();
+      ctx.moveTo(cx - ew / 2, cy + eh * 0.12);
+      ctx.quadraticCurveTo(cx, cy - eh * 0.38, cx + ew / 2, cy + eh * 0.12);
+      ctx.stroke();
+      ctx.restore();
+    }
+  }
+
   // Map the picture's triangle s onto the screen triangle d (an affine transform),
-  // clipped to d grown by half a pixel so neighbouring triangles leave no hairline gaps.
+  // clipped to d grown by most of a pixel so neighbouring triangles leave no hairline gaps.
   function texturedTriangle(ctx, img, s, d) {
     const [[s0x, s0y], [s1x, s1y], [s2x, s2y]] = s;
     const [[d0x, d0y], [d1x, d1y], [d2x, d2y]] = d;
@@ -161,7 +188,7 @@
     const cy = (d0y + d1y + d2y) / 3;
     const grow = (x, y) => {
       const l = Math.hypot(x - cx, y - cy) || 1;
-      return [x + ((x - cx) / l) * 0.6, y + ((y - cy) / l) * 0.6];
+      return [x + ((x - cx) / l) * 0.8, y + ((y - cy) / l) * 0.8];
     };
     ctx.save();
     ctx.beginPath();
@@ -343,6 +370,7 @@
         // Everything the parts don't touch, then the touched cells bent like rubber.
         ctx.drawImage(layers.base, x0, y0, iw, ih);
         drawBentCells(ctx, layers, t, x0, y0, iw / layers.mesh.w);
+        drawWinks(ctx, layers, t, x0, y0, iw / layers.mesh.w);
       } else {
         ctx.drawImage(img, x0, y0, iw, ih);
       }

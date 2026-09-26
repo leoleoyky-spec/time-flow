@@ -163,3 +163,10 @@ test('a text position later in the sentence is still read', () => {
   assert.deepStrictEqual(parseInstruction('「だいすき」を文字をアーチにして上に').changes.textPos, [0, -0.25]);
   assert.ok(!('textPos' in parseInstruction('「やった」を上下に跳ねる').changes));
 });
+
+test('wink words', () => {
+  assert.strictEqual(parsePartRequest('右目でウインク').cfg.type, 'wink');
+  assert.strictEqual(parsePartRequest('右目でウインク').name, '右目');
+  assert.strictEqual(parsePartRequest('まばたきする').name, '目');
+  assert.strictEqual(parsePartMotion('目をつぶる').cfg.type, 'wink');
+});

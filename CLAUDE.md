@@ -52,6 +52,9 @@ Two features worth knowing about when touching `js/app.js` or `js/animations.js`
   generously near the joint), and `drawFrame()` draws the touched cells as textured triangles.
   The app can't find a hand by itself (that would need AI image recognition), so worded part
   requests (`parsePartRequests()`, several per sentence) queue each untraced part for tracing.
+  A **wink** is different: bending a loosely traced eye area also squashed the mouth and cheek,
+  so `findEye()` picks the dark patch inside the trace, the base picture gets it painted over with
+  the surrounding skin, and `drawWinks()` draws it open, squashed, or as a closed-eye arc.
 
 - **Text and picture layout**: `layoutSticker()` in `js/animations.js` is the single source of
   where the picture and text sit (including the user's drag offsets `textPos`/`imagePos`, as
