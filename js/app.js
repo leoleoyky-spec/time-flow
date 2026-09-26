@@ -334,7 +334,23 @@
     return canvasToPNG(c);
   }
 
-  function download(bytes, name, type) {
+  // Inside a claude.ai Artifact, plain downloads are blocked; use its downloads capability there.
+  const artifactDownloads =
+    window.claude && typeof window.claude.use === 'function'
+      ? window.claude.use('downloads').catch(() => null)
+      : Promise.resolve(null);
+
+  async function download(bytes, name, type) {
+    const downloads = await artifactDownloads;
+    if (downloads) {
+      try {
+        await downloads.save({ filename: name, data: new Blob([bytes], { type }) });
+        return true;
+      } catch (err) {
+        if (err && err.code === 'declined') return false;
+        throw new Error(err && err.message ? err.message : '保存できませんでした');
+      }
+    }
     const url = URL.createObjectURL(new Blob([bytes], { type }));
     const a = document.createElement('a');
     a.href = url;
@@ -343,6 +359,7 @@
     a.click();
     a.remove();
     setTimeout(() => URL.revokeObjectURL(url), 2000);
+    return true;
   }
 
   async function withBusy(fn) {
@@ -362,7 +379,7 @@
     return withBusy(async () => {
       const num = String(state.selected + 1).padStart(2, '0');
       const bytes = await buildAPNG(current(), W, H);
-      download(bytes, `${num}.png`, 'image/png');
+      if (!(await download(bytes, `${num}.png`, 'image/png'))) return setStatus('保存をキャンセルしました');
       setStatus(`${num}.png を保存しました（${(bytes.length / 1024).toFixed(0)} KB）`, bytes.length > MAX_BYTES);
     });
   }
@@ -383,7 +400,9 @@
         { name: 'main.png', data: await buildAPNG(first, 240, 240) },
         { name: 'tab.png', data: await buildStill(first, 96, 74) }
       );
-      download(createZip(files), 'line_animation_stickers.zip', 'application/zip');
+      if (!(await download(createZip(files), 'line_animation_stickers.zip', 'application/zip'))) {
+        return setStatus('保存をキャンセルしました');
+      }
 
       const notes = [];
       if (oversized.length) notes.push(`300KB超え：${oversized.join(', ')}`);
