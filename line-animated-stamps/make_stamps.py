@@ -161,7 +161,11 @@ def load_custom_frames(folder: Path, size: tuple[int, int]) -> list[Image.Image]
     cw, ch = size
     frames = []
     for p in files:
-        im = fit(Image.open(p).convert("RGBA"), cw - MARGIN * 2, ch - MARGIN * 2)
+        im = Image.open(p).convert("RGBA")
+        if im.size == size:  # すでに 320x270 で描かれたコマはそのまま使う
+            frames.append(im)
+            continue
+        im = fit(im, cw - MARGIN * 2, ch - MARGIN * 2)
         frame = Image.new("RGBA", (cw, ch), (0, 0, 0, 0))
         frame.alpha_composite(im, ((cw - im.width) // 2, (ch - im.height) // 2))
         frames.append(frame)

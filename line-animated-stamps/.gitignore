@@ -1,3 +1,6 @@
 output/
 demo/
 __pycache__/
+*_frames/
+panda/*
+!panda/motions.csv

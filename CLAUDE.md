@@ -13,6 +13,8 @@ time-flow/
 ├── CLAUDE.md                 # AI assistant guidance (this file)
 └── line-animated-stamps/     # LINE アニメーションスタンプ一括作成ツール (Python + Pillow)
     ├── make_stamps.py        # 生成・仕様チェック・ZIP作成 (python make_stamps.py --demo)
+    ├── sheet_to_stamps.py    # 一覧画像 (4x4等) → 切り抜き・レイヤー分け・派手な動き
+    ├── panda/motions.csv     # sheet_to_stamps.py 用の動き指定の例
     ├── stamps.csv            # スタンプ一覧のテンプレート
     ├── input/                # ユーザーのイラスト置き場
     └── tests/                # pytest (python -m pytest tests)

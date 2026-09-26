@@ -121,6 +121,28 @@ output/
 python make_stamps.py --validate output/
 ```
 
+## 一覧画像から派手に動くスタンプを作る（`sheet_to_stamps.py`）
+
+4×4 などに並べたイラスト1枚から、16個の「派手に動く」スタンプを一括で作れます。
+
+```bash
+python sheet_to_stamps.py panda/sheet.webp --grid 4x4 --config panda/motions.csv -o panda/output
+```
+
+- マス目で切り分けて白背景を透過にし、白フチを付けます（線が途切れていても、顔の白は残します）
+- **文字とキャラを別のレイヤーに分けて**、それぞれ違う動きを付けます
+- 集中線・キラキラ・ハート・紙吹雪・光線などのエフェクトを重ねます
+- 1個あたり20コマ（1秒×3回、または2秒×2回）で、仕様チェックとZIP作成まで行います
+- `--only 3` を付けると3番だけ作り直せます（動きを調整するとき用）
+
+`motions.csv` で、1行ごとに動きを指定します（`name,char,text,fx,frames,seconds,loops`）。
+
+| 種類 | 選べるもの |
+|---|---|
+| `char`（キャラ） | `jump` ためて大ジャンプ / `pop` ポンッと登場 / `rock` ゆらゆら / `bow` おじぎ / `deepbow` 深いおじぎ / `nod` うんうん / `heartbeat` ドキドキ / `spin_in` 回転しながら登場 / `hop` ぴょんぴょん / `sway` のんびり揺れる / `rise` 下からニョキッ / `wave` 手をふる / `float` ふわふわ / `angry` ぷんぷん / `punch` ドーン! / `spin_jump` 回転ジャンプ |
+| `text`（文字） | `slam` ドン!と落ちる / `pop` 1文字ずつ出る / `wave` 1文字ずつぴょこぴょこ / `shake` ぶるぶる / `jump` 交互にジャンプ / `slide` 左からスライド / `sway` ゆらゆら |
+| `fx`（効果） | `burst` 集中線 / `sparkles` キラキラ / `twinkle` 四隅がキラッ / `hearts` ハート / `confetti` 紙吹雪 / `rays` 光線 / `speed` スピード線 / `zzz` おやすみ / `anger` 怒りの線 / `shock` 衝撃の輪 / `none` なし |
+
 ## テスト
 
 ```bash
