@@ -42,7 +42,9 @@ Two features worth knowing about when touching `js/app.js` or `js/animations.js`
   slider values; the same file's `parseInstruction()` powers the 「言葉でおまかせ」 box, reading
   quoted sticker text, colors (assigned to the nearest noun: 文字/フチ/effect), effect, font, size
   and timing from one sentence. Both are deliberately keyword-based (no AI call) so the app stays
-  free and offline for whoever it's shared with.
+  free and offline for whoever it's shared with. The custom motion has no sliders in the UI any
+  more (users found them meaningless); the うごき tab offers one-tap whole-body presets and, below,
+  worded/traced part motions, and a worded whole-body motion shows as the 「おまかせの動き」 chip.
 - **Moving one part** ("左手だけ振る"): the user traces the part on the picture (`sticker.parts`:
   name, outline and joint in 0–1 image coords, motion cfg). Parts are not cut out (that left the
   old hand behind and tore the wrist): `buildMesh()` in `js/parts.js` lays a grid over the picture

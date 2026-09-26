@@ -68,7 +68,7 @@
       <div class="tab-page" id="page-text" role="tabpanel" aria-labelledby="tab-text">
       <div class="wish">
         <h2><label for="wishText">言葉でおまかせ</label></h2>
-        <p class="hint">作りたいスタンプを日本語で書くと、文字・色・飾り・動きをまとめて設定します。スタンプの文字は「　」でかこんでね。</p>
+        <p class="hint">文字は「」でかこんで、色・飾り・動きも書くとまとめて設定します。</p>
         <textarea id="wishText" rows="3" placeholder="例：「おはよう」をピンクの文字で、キラキラさせて、ゆっくりふわふわ"></textarea>
         <button id="wishApply" type="button" class="btn wish-btn">この内容で作る</button>
         <p id="wishResult" class="hint" role="status"></p>
@@ -111,11 +111,17 @@
         </div>
       </div>
 
+      </div>
+
+      <div class="tab-page" id="page-motion" role="tabpanel" aria-labelledby="tab-motion" hidden>
+      <h2>体全体の動き</h2>
+      <div id="motions" class="chips" role="radiogroup" aria-label="体全体の動き"></div>
+
       <div id="partsPanel" class="parts-panel">
-        <h3>一部分だけ動かす <small>（手をふる など）</small></h3>
+        <h2>一部分の動き <small>（手・耳など）</small></h2>
         <p id="partsHint" class="hint"></p>
         <div id="partWords">
-          <label for="partText" class="words-label">動かしたい部分と動きを言葉で</label>
+          <label for="partText" class="words-label">動かしたい部分と動き</label>
           <div class="words-row">
             <input id="partText" type="text" placeholder="例：左手を大きく振って、右耳を上下に" enterkeyhint="done">
             <button id="partApply" type="button" class="btn small">動かす</button>
@@ -136,36 +142,6 @@
           </div>
         </div>
       </div>
-
-      </div>
-
-      <div class="tab-page" id="page-motion" role="tabpanel" aria-labelledby="tab-motion" hidden>
-      <h2>うごき</h2>
-      <div id="motions" class="chips" role="radiogroup" aria-label="うごき"></div>
-      <div id="customPanel" class="custom-panel" hidden>
-        <label for="customText" class="words-label">どんな動きにしたい？ 日本語で書いてね</label>
-        <div class="words-row">
-          <input id="customText" type="text" placeholder="例：大きく2回跳ねる" enterkeyhint="done">
-          <button id="customApply" type="button" class="btn small">動かす</button>
-        </div>
-        <p id="customResult" class="hint" role="status"></p>
-        <div id="customExamples" class="chips examples" aria-label="例"></div>
-        <p class="hint fine-tune">細かい調整（言葉で動かしたあとにさわってもOK）</p>
-        <p class="hint">動く道すじ</p>
-        <div id="customPath" class="chips" role="radiogroup" aria-label="動く道すじ"></div>
-        <p class="hint">リズム</p>
-        <div id="customWave" class="chips" role="radiogroup" aria-label="リズム"></div>
-        <div class="grid2">
-          <label>速さ<input id="customSpeed" type="range" min="1" max="4" step="1"></label>
-          <label>拡大縮小<input id="customZoom" type="range" min="-50" max="50" step="1"></label>
-          <label>上下の動き<input id="customMoveY" type="range" min="-100" max="100" step="5"></label>
-          <label>左右の動き<input id="customMoveX" type="range" min="-100" max="100" step="5"></label>
-          <label>回転<input id="customRotate" type="range" min="-45" max="45" step="1"></label>
-          <label>伸び縮み<input id="customSquash" type="range" min="-30" max="30" step="1"></label>
-          <label>止まる時間<input id="customPause" type="range" min="0" max="60" step="5"></label>
-        </div>
-      </div>
-
       </div>
 
       <div class="tab-page" id="page-extra" role="tabpanel" aria-labelledby="tab-extra" hidden>

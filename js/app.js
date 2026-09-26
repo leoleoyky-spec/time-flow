@@ -1,9 +1,9 @@
 (function () {
   'use strict';
 
-  const { FONTS, MOTIONS, EFFECTS, CUSTOM_WAVES, CUSTOM_PATHS, defaultSticker, drawFrame, layoutSticker } = window.Stickers;
+  const { FONTS, MOTIONS, EFFECTS, defaultSticker, drawFrame, layoutSticker } = window.Stickers;
   const { assembleAPNG, quantize, encodeIndexedPNG, createZip } = window.Encoder;
-  const { parseMotionText, parseInstruction, parsePartRequests, parsePartMotion, EXAMPLES: MOTION_EXAMPLES, WISH_EXAMPLES } = window.MotionWords;
+  const { parseInstruction, parsePartRequests, parsePartMotion, WISH_EXAMPLES } = window.MotionWords;
   const { removeBackgroundPixels } = window.BgRemove;
   const { guessPivot, buildMesh, PART_MOTIONS } = window.Parts;
 
@@ -251,11 +251,11 @@
     if (partMode === 'draw') $('partAdd').disabled = false;
     $('partRemove').hidden = !parts.length;
     let hint;
-    if (!hasImg) hint = '先に「画像を選ぶ」で画像を入れてね';
+    if (!hasImg) hint = '先に「画像」タブで画像を入れてね';
     else if (partMode === 'draw' && pendingParts.length) hint = `「${pendingParts[0].name}」を、指やマウスでぐるっと囲んでね`;
     else if (partMode === 'draw') hint = '動かしたい部分（左手など）を、指やマウスでぐるっと囲んでね';
-    else if (!parts.length) hint = '「動かす部分をなぞる」を押して、動かしたい部分を囲むと、そこだけ動かせます';
-    else hint = '赤い点が動きの中心（つけ根）です。ちがう場所をタップすると移せます';
+    else if (!parts.length) hint = '言葉で書くか、「動かす部分をなぞる」で囲んだ部分だけが動きます';
+    else hint = '赤い点が動きの中心です（タップで移動）';
     $('partsHint').textContent = hint;
 
     const tabs = $('partTabs');
@@ -322,7 +322,7 @@
     if (!reqs.length) return null;
     const st = current();
     const names = reqs.map((r) => r.name).join('・');
-    if (!st.image) return `先に「画像を選ぶ」で画像を入れてね。そのあと${names}を囲むと、そこだけ動かせます`;
+    if (!st.image) return '先に「画像」タブで画像を入れてね';
     const done = [];
     const queue = [];
     for (const req of reqs) {
@@ -340,16 +340,16 @@
       }
     }
     changed();
-    let msg = done.length ? '読みとった内容：' + done.join(' / ') : '';
+    let msg = done.length ? '設定しました：' + done.join(' / ') : '';
     if (queue.length) {
       pendingParts = queue;
-      showTab('image');
+      showTab('motion');
       partMode = 'draw';
       stroke = null;
       syncParts();
       $('partsPanel').scrollIntoView({ behavior: 'smooth', block: 'center' });
       const qn = queue.map((r) => r.name).join('、');
-      msg += (msg ? '。' : '') + `${qn}がどこにあるか、まだわからないよ。「画像」タブの絵で、${queue[0].name}を指でぐるっと囲んでね` + (queue.length > 1 ? '（囲むと次の部分の案内が出ます）' : '。囲むとすぐ動きます');
+      msg += (msg ? '。' : '') + `「うごき」タブの絵で、${queue[0].name}を指でぐるっと囲んでね` + (queue.length > 1 ? `（次は${queue.slice(1).map((r) => r.name).join('、')}）` : '');
     }
     return msg;
   }
@@ -366,7 +366,7 @@
     const m = parsePartMotion(text);
     if (!m) {
       $('partResult').textContent = text.trim()
-        ? 'ごめんね、動きの言葉が見つからなかったよ。例：「左手を大きく振る」「ゆっくり上下に」'
+        ? 'わかる言葉が見つかりませんでした'
         : '動かしたい部分と動きを書いてね';
       return;
     }
@@ -380,7 +380,7 @@
     }
     Object.assign(st.parts[partSel].cfg, m.cfg);
     changed();
-    $('partResult').textContent = `「${st.parts[partSel].name || '部分' + (partSel + 1)}」を設定しました：` + m.understood.join('・');
+    $('partResult').textContent = `${st.parts[partSel].name || '部分' + (partSel + 1)}：` + m.understood.join('・');
   }
 
 
@@ -450,11 +450,12 @@
   const fields = ['text', 'font', 'fontSize', 'color', 'strokeColor', 'strokeWidth', 'textCurve', 'textRotate', 'imageScale', 'effectColor', 'frames', 'duration', 'loops'];
   const numeric = new Set(['fontSize', 'strokeWidth', 'textCurve', 'textRotate', 'imageScale', 'frames', 'duration', 'loops']);
 
-  const CUSTOM_SLIDERS = { customSpeed: 'speed', customMoveX: 'moveX', customMoveY: 'moveY', customRotate: 'rotate', customZoom: 'zoom', customSquash: 'squash', customPause: 'pause' };
-
   function buildEditor() {
     $('font').innerHTML = FONTS.map((f) => `<option value="${f.id}">${f.label}</option>`).join('');
-    buildChips($('motions'), MOTIONS, (id) => {
+    // Whole-body motions are picked with one tap. The worded motion from 言葉でおまかせ
+    // ("custom") has no sliders of its own; its chip only appears while it is in use.
+    const bodyMotions = Object.fromEntries(Object.entries(MOTIONS).map(([id, m]) => [id, id === 'custom' ? { label: 'おまかせの動き' } : m]));
+    buildChips($('motions'), bodyMotions, (id) => {
       current().motion = id;
       changed();
     });
@@ -462,15 +463,6 @@
       setEffect(current(), id);
       changed();
     });
-    buildChips($('customWave'), CUSTOM_WAVES, (id) => {
-      current().custom.wave = id;
-      changed();
-    });
-    buildChips($('customPath'), CUSTOM_PATHS, (id) => {
-      current().custom.path = id;
-      changed();
-    });
-
     const applyWish = () => {
       const { changes, understood } = parseInstruction($('wishText').value);
       const partMsg = applyPartWords($('wishText').value);
@@ -482,20 +474,21 @@
         if (effect) setEffect(current(), effect);
         Object.assign(current(), fields);
         changed(!!fields.font);
-        $('wishResult').textContent = partMsg;
+        const others = understood.filter((u) => !u.startsWith('動き'));
+        $('wishResult').textContent = (others.length ? '設定しました：' + others.join(' / ') + '。' : '') + partMsg;
         return;
       }
       const plain = $('wishText').value.trim();
       if (!understood.length && plain && plain.length <= 15) {
         // Nothing to interpret: a short line is most likely the words for the sticker.
         current().text = plain;
-        $('wishResult').textContent = `「${plain}」を文字として入れました（色や動きも書くと、まとめて設定できます）`;
+        $('wishResult').textContent = `「${plain}」を文字にしました`;
         changed();
         return;
       }
       if (!understood.length) {
         $('wishResult').textContent = $('wishText').value.trim()
-          ? 'ごめんね、わかる言葉が見つからなかったよ。下の例を参考にしてね'
+          ? 'わかる言葉が見つかりませんでした'
           : '作りたいスタンプを書いてね';
         return;
       }
@@ -505,7 +498,7 @@
       Object.assign(st, fields);
       if (custom) Object.assign(st.custom, custom, { text: '' });
       st.loops = Math.min(st.loops, Math.max(1, Math.floor(4 / st.duration)));
-      $('wishResult').textContent = '読みとった内容：' + understood.join(' / ');
+      $('wishResult').textContent = '設定しました：' + understood.join(' / ');
       changed(!!fields.font);
     };
     $('wishApply').addEventListener('click', applyWish);
@@ -527,49 +520,6 @@
         current()[key] = numeric.has(key) ? Number(el.value) : el.value;
         if (key === 'duration') fixLoops();
         changed(key === 'font');
-      });
-    }
-
-    const applyWords = () => {
-      const text = $('customText').value;
-      const st = current();
-      st.custom.text = text;
-      const partMsg = applyPartWords(text);
-      if (partMsg) {
-        $('customResult').textContent = partMsg;
-        return;
-      }
-      const r = parseMotionText(text);
-      if (!r) {
-        $('customResult').textContent = text.trim()
-          ? 'ごめんね、動きの言葉が見つからなかったよ。下の例を参考にしてね'
-          : '動きを言葉で書いてね';
-        return;
-      }
-      Object.assign(st.custom, r.custom);
-      $('customResult').textContent = '読みとった動き：' + r.understood.join('・');
-      changed();
-    };
-    $('customApply').addEventListener('click', applyWords);
-    $('customText').addEventListener('keydown', (e) => {
-      if (e.key === 'Enter' && !e.isComposing) applyWords();
-    });
-    for (const ex of MOTION_EXAMPLES) {
-      const b = document.createElement('button');
-      b.type = 'button';
-      b.className = 'chip';
-      b.textContent = ex;
-      b.addEventListener('click', () => {
-        $('customText').value = ex;
-        applyWords();
-      });
-      $('customExamples').append(b);
-    }
-
-    for (const [elId, prop] of Object.entries(CUSTOM_SLIDERS)) {
-      $(elId).addEventListener('input', () => {
-        current().custom[prop] = Number($(elId).value);
-        changed();
       });
     }
 
@@ -892,7 +842,7 @@
       if ($(key).value !== String(st[key])) $(key).value = st[key];
     }
     $('framesOut').textContent = st.frames;
-    for (const [container, val] of [[$('motions'), st.motion], [$('effects'), st.effect], [$('customWave'), st.custom.wave], [$('customPath'), st.custom.path]]) {
+    for (const [container, val] of [[$('motions'), st.motion], [$('effects'), st.effect]]) {
       container.querySelectorAll('.chip').forEach((c) => c.setAttribute('aria-checked', String(c.dataset.value === val)));
     }
     $('clearImage').disabled = !st.image;
@@ -900,11 +850,7 @@
     $('specTime').textContent = `${st.duration}秒 × ${st.loops}回`;
     updateSize(st);
 
-    $('customPanel').hidden = st.motion !== 'custom';
-    if (document.activeElement !== $('customText')) $('customText').value = st.custom.text || '';
-    for (const [elId, prop] of Object.entries(CUSTOM_SLIDERS)) {
-      if ($(elId).value !== String(st.custom[prop])) $(elId).value = st.custom[prop];
-    }
+    $('motions').querySelector('[data-value="custom"]').hidden = st.motion !== 'custom';
 
     $('bgToggle').disabled = !st.originalImage;
     if (!st.originalImage) {
@@ -946,7 +892,6 @@
     partMode = 'idle';
     pendingParts = [];
     stroke = null;
-    $('customResult').textContent = '';
     $('wishResult').textContent = '';
     startTime = performance.now();
     syncEditor();
