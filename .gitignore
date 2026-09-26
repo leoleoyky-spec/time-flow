@@ -1,0 +1,4 @@
+node_modules/
+video/shots/
+video/out/*
+!video/out/.gitkeep

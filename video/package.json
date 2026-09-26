@@ -1,0 +1,20 @@
+{
+  "name": "video",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@fontsource/cormorant-garamond": "^5.3.0",
+    "@fontsource/jetbrains-mono": "^5.3.0",
+    "@fontsource/noto-sans-jp": "^5.3.0",
+    "@fontsource/noto-serif-jp": "^5.3.0",
+    "@fontsource/shippori-mincho": "^5.3.0",
+    "gsap": "^3.15.0"
+  }
+}

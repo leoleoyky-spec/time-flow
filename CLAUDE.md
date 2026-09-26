@@ -11,7 +11,8 @@ This file provides guidance for AI assistants (Claude, etc.) working in the **ti
 ```
 time-flow/
 ├── CLAUDE.md          # AI assistant guidance (this file)
-└── (project files to be added)
+├── montblanc-site/    # Demo LP: animated chestnut Mont Blanc + magnifier lens (single index.html)
+└── video/             # 16:9 explainer video built with HTML + GSAP, rendered via Playwright + ffmpeg (see video/README.md)
 ```
 
 > **Note:** This project is newly initialized. Update this section as the codebase grows.

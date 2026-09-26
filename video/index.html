@@ -1,0 +1,1086 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>Codexで作る 動くモンブランサイト — 解説動画</title>
+<link rel="stylesheet" href="fonts.css">
+<style>
+:root {
+  --bg: #0e0a08; --ink: #f4ecdf; --muted: #a8977f; --gold: #c9a36a; --gold2: #ecd3a0; --gold3: #8c6a36;
+  --cx-bg: #0d0d0f; --cx-panel: #151518; --cx-line: #26262b; --cx-ink: #ececf1; --cx-mute: #8b8b95; --cx-accent: #7aa2ff;
+  --green: #3fb950; --red: #f85149;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { width: 1920px; height: 1080px; overflow: hidden; background: #000; }
+body { font-family: "Noto Sans JP", sans-serif; color: var(--ink); -webkit-font-smoothing: antialiased; }
+#stage { position: absolute; inset: 0; overflow: hidden; background: radial-gradient(1400px 900px at 50% 40%, #22170f, #0b0806 70%); }
+.scene { position: absolute; inset: 0; visibility: hidden; opacity: 0; overflow: hidden; }
+.cam { position: absolute; inset: 0; transform-origin: 50% 50%; }
+.abs { position: absolute; }
+.serif { font-family: "Shippori Mincho", "Noto Serif JP", serif; }
+.latin { font-family: "Cormorant Garamond", serif; }
+.mono { font-family: "JetBrains Mono", monospace; }
+.goldtext { background: linear-gradient(100deg, #9c7336 0%, #f3dca8 30%, #fff6dc 45%, #d7b06c 60%, #8c6a36 100%); background-size: 200% 100%; -webkit-background-clip: text; background-clip: text; color: transparent; }
+img.shot { display: block; }
+
+/* ---------- global overlays ---------- */
+#dust, #grain { position: absolute; inset: 0; pointer-events: none; }
+#grain { width: 1920px; height: 1080px; opacity: .07; mix-blend-mode: overlay; image-rendering: pixelated; }
+#vignette { position: absolute; inset: 0; pointer-events: none; background: radial-gradient(1300px 820px at 50% 50%, transparent 55%, rgba(0,0,0,.55)); }
+#flash { position: absolute; inset: 0; background: #fff8ea; opacity: 0; pointer-events: none; }
+#wipe { position: absolute; top: -200px; bottom: -200px; width: 900px; left: -1400px; transform: skewX(-18deg); pointer-events: none;
+  background: linear-gradient(90deg, transparent, #8c6a36 12%, #ecd3a0 45%, #fff3d6 50%, #c9a36a 60%, #3a2816 88%, transparent); }
+.bars { position: absolute; inset: 0; pointer-events: none; }
+.bars i { position: absolute; left: 0; width: 100%; height: 20%; background: #0b0806; transform: scaleX(0); }
+#letterT, #letterB { position: absolute; left: 0; width: 100%; height: 0; background: #000; pointer-events: none; }
+#letterT { top: 0; } #letterB { bottom: 0; }
+
+/* subtitles */
+#sub { position: absolute; left: 50%; bottom: 58px; transform: translateX(-50%); padding: 14px 40px 16px; white-space: nowrap;
+  font-family: "Noto Sans JP"; font-weight: 700; font-size: 44px; letter-spacing: .04em; color: #fff;
+  text-shadow: 0 0 2px #000, 0 3px 0 #000, 0 -2px 0 #000, 2px 0 0 #000, -2px 0 0 #000, 0 6px 22px rgba(0,0,0,.8); }
+#sub em { font-style: normal; color: #ffd98a; }
+/* chapter HUD */
+#hud { position: absolute; left: 56px; top: 44px; display: flex; align-items: center; gap: 18px; opacity: 0; }
+#hud .num { font-family: "Cormorant Garamond"; font-size: 34px; color: var(--gold2); letter-spacing: .1em; }
+#hud .lab { font-family: "Shippori Mincho"; font-size: 22px; letter-spacing: .2em; color: var(--ink); }
+#hud .track { width: 220px; height: 3px; background: rgba(255,255,255,.15); position: relative; }
+#hud .track i { position: absolute; inset: 0; background: linear-gradient(90deg, var(--gold3), var(--gold2)); transform-origin: 0 0; transform: scaleX(0); }
+#brand { position: absolute; right: 56px; top: 46px; font-family: "Cormorant Garamond"; font-size: 20px; letter-spacing: .4em; color: rgba(236,211,160,.7); opacity: 0; }
+
+/* cursor */
+#cursor { position: absolute; left: 0; top: 0; width: 44px; height: 44px; pointer-events: none; opacity: 0; z-index: 50; filter: drop-shadow(0 6px 10px rgba(0,0,0,.5)); }
+.ripple { position: absolute; width: 90px; height: 90px; margin: -45px 0 0 -45px; border-radius: 50%; border: 4px solid #ffd98a; opacity: 0; pointer-events: none; z-index: 49; }
+
+/* ---------- reusable telops ---------- */
+.stamp { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); white-space: nowrap; text-align: center; }
+.tag { position: absolute; display: inline-flex; align-items: center; gap: 12px; padding: 12px 26px; font-weight: 700; font-size: 30px; white-space: nowrap;
+  background: linear-gradient(135deg, #f3dca8, #b8894a); color: #1a120d; box-shadow: 0 12px 30px rgba(0,0,0,.4); border-radius: 4px; }
+.tag.dark { background: rgba(14,10,8,.9); color: var(--ink); border: 1px solid var(--gold); }
+.tag .n { font-family: "Cormorant Garamond"; font-size: 34px; font-weight: 600; }
+.callout { position: absolute; }
+.callout .dot { position: absolute; width: 18px; height: 18px; margin: -9px 0 0 -9px; border-radius: 50%; background: #ffd98a; box-shadow: 0 0 0 6px rgba(255,217,138,.3); }
+.callout svg { position: absolute; left: 0; top: 0; overflow: visible; }
+.callout .box { position: absolute; white-space: nowrap; padding: 12px 22px; background: rgba(12,9,7,.92); border: 1.5px solid var(--gold); color: var(--ink);
+  font-family: "Noto Sans JP"; font-weight: 700; font-size: 28px; letter-spacing: .04em; box-shadow: 0 16px 40px rgba(0,0,0,.5); }
+.callout .box small { display: block; font-family: "Cormorant Garamond"; font-weight: 600; font-size: 16px; letter-spacing: .3em; color: var(--gold2); margin-bottom: 2px; }
+
+/* ---------- browser mockup ---------- */
+.browser { position: absolute; border-radius: 14px; overflow: hidden; background: #1b1b1e; box-shadow: 0 60px 120px rgba(0,0,0,.65), 0 0 0 1px rgba(255,255,255,.08); }
+.browser .bar { height: 46px; display: flex; align-items: center; gap: 10px; padding: 0 18px; background: linear-gradient(#2a2a2e, #222226); }
+.browser .bar i { width: 13px; height: 13px; border-radius: 50%; background: #ff5f57; } .browser .bar i:nth-child(2) { background: #febc2e; } .browser .bar i:nth-child(3) { background: #28c840; }
+.browser .url { margin-left: 24px; flex: 1; max-width: 640px; height: 28px; border-radius: 7px; background: #141416; color: #b9b9c2; font-size: 15px; display: flex; align-items: center; padding: 0 14px; gap: 8px; font-family: "JetBrains Mono"; }
+.browser .view { position: relative; overflow: hidden; }
+.browser iframe { border: 0; width: 1440px; height: 900px; transform-origin: 0 0; display: block; background: #15100c; }
+
+/* ---------- Codex UI mockup ---------- */
+.cx { position: absolute; left: 110px; top: 90px; width: 1700px; height: 900px; border-radius: 16px; overflow: hidden; background: var(--cx-bg);
+  box-shadow: 0 60px 140px rgba(0,0,0,.7), 0 0 0 1px rgba(255,255,255,.07); font-family: "Noto Sans JP"; color: var(--cx-ink); }
+.cx-top { height: 48px; display: flex; align-items: center; padding: 0 20px; gap: 10px; border-bottom: 1px solid var(--cx-line); background: #111114; }
+.cx-top i { width: 13px; height: 13px; border-radius: 50%; background: #3a3a40; }
+.cx-top .t { margin-left: 18px; font-weight: 500; font-size: 17px; letter-spacing: .02em; display: flex; align-items: center; gap: 10px; }
+.cx-top .t svg { width: 22px; height: 22px; }
+.cx-top .note { margin-left: auto; font-size: 14px; color: var(--cx-mute); }
+.cx-body { display: flex; height: calc(100% - 48px); }
+.cx-side { width: 300px; border-right: 1px solid var(--cx-line); padding: 22px 16px; background: #101013; flex-shrink: 0; }
+.cx-new { display: flex; align-items: center; gap: 10px; padding: 13px 16px; border-radius: 10px; background: #1d1d22; font-size: 17px; font-weight: 500; border: 1px solid #2c2c33; }
+.cx-sec { margin: 30px 8px 12px; font-size: 13px; color: var(--cx-mute); letter-spacing: .12em; }
+.cx-item { padding: 11px 14px; border-radius: 8px; font-size: 16px; color: #c9c9d2; display: flex; align-items: center; gap: 10px; white-space: nowrap; overflow: hidden; }
+.cx-item.on { background: #22222a; color: #fff; }
+.cx-item svg { width: 18px; height: 18px; flex-shrink: 0; opacity: .8; }
+.cx-main { flex: 1; position: relative; display: flex; }
+.cx-chat { flex: 1; position: relative; padding: 40px 70px; }
+.cx-empty { position: absolute; left: 0; right: 0; top: 250px; text-align: center; font-size: 40px; font-weight: 500; letter-spacing: .04em; }
+.cx-empty small { display: block; margin-top: 14px; font-size: 18px; color: var(--cx-mute); font-weight: 400; }
+.cx-composer { position: absolute; left: 70px; right: 70px; bottom: 40px; min-height: 150px; border-radius: 18px; background: var(--cx-panel); border: 1px solid #2d2d35; padding: 22px 26px 64px; font-size: 22px; line-height: 1.75; color: #f1f1f5; }
+.cx-composer .ph { color: #6c6c77; }
+.cx-composer .foot { position: absolute; left: 22px; right: 22px; bottom: 14px; display: flex; align-items: center; gap: 12px; font-size: 14px; color: var(--cx-mute); }
+.cx-composer .chip { padding: 5px 12px; border-radius: 999px; background: #202027; border: 1px solid #2d2d35; }
+.cx-composer .send { margin-left: auto; width: 42px; height: 42px; border-radius: 50%; background: #f1f1f5; display: grid; place-items: center; }
+.caret { display: inline-block; width: 3px; height: 1.05em; background: #fff; vertical-align: -3px; margin-left: 2px; }
+.mark { background: linear-gradient(transparent 58%, rgba(255,200,90,.55) 58%); border-radius: 2px; }
+.cx-modal { position: absolute; left: 50%; top: 50%; width: 760px; transform: translate(-50%, -50%); background: #17171b; border: 1px solid #30303a; border-radius: 18px; padding: 36px 40px; box-shadow: 0 40px 90px rgba(0,0,0,.7); }
+.cx-modal h4 { font-size: 26px; font-weight: 500; margin-bottom: 26px; }
+.cx-field { margin-bottom: 20px; }
+.cx-field label { display: block; font-size: 15px; color: var(--cx-mute); margin-bottom: 8px; }
+.cx-field .in { height: 56px; border-radius: 10px; background: #0f0f12; border: 1.5px solid #34343d; display: flex; align-items: center; padding: 0 18px; font-size: 21px; gap: 10px; }
+.cx-field .in.focus { border-color: var(--cx-accent); box-shadow: 0 0 0 4px rgba(122,162,255,.18); }
+.cx-btns { display: flex; justify-content: flex-end; gap: 12px; margin-top: 28px; }
+.cx-btns span { padding: 12px 26px; border-radius: 10px; font-size: 18px; background: #24242b; }
+.cx-btns span.pri { background: #f1f1f5; color: #111; font-weight: 500; }
+.bubble-u { margin-left: auto; max-width: 900px; background: #1f1f25; border: 1px solid #2d2d35; border-radius: 18px 18px 4px 18px; padding: 18px 24px; font-size: 19px; line-height: 1.7; }
+.agent { margin-top: 28px; font-size: 19px; line-height: 1.7; }
+.agent .step { display: flex; align-items: center; gap: 14px; padding: 9px 0; color: #d7d7de; }
+.agent .step .ic { width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center; font-size: 15px; background: #1e2d20; color: var(--green); flex-shrink: 0; }
+.agent .step .ic.spin { background: none; border: 3px solid #333; border-top-color: var(--cx-accent); }
+.agent .step code { font-family: "JetBrains Mono"; font-size: 16px; background: #1d1d23; padding: 2px 8px; border-radius: 6px; color: #c9d1ff; }
+.cx-diff { width: 640px; border-left: 1px solid var(--cx-line); background: #0b0b0d; position: relative; overflow: hidden; flex-shrink: 0; }
+.cx-diff .hd { position: relative; z-index: 2; background: #0b0b0d; height: 58px; display: flex; align-items: center; gap: 12px; padding: 0 20px; border-bottom: 1px solid var(--cx-line); font-family: "JetBrains Mono"; font-size: 16px; }
+.cx-diff .hd b { color: var(--green); font-weight: 600; } .cx-diff .hd s { color: var(--red); text-decoration: none; }
+.cx-diff .lines { position: absolute; left: 0; right: 0; top: 58px; font-family: "JetBrains Mono"; font-size: 14.5px; line-height: 25px; }
+.cx-diff .ln { display: flex; white-space: pre; background: rgba(63,185,80,.10); color: #b8e0bf; }
+.cx-diff .ln u { text-decoration: none; width: 52px; text-align: right; padding-right: 12px; color: #4f7a57; flex-shrink: 0; }
+.toast { position: absolute; display: flex; align-items: center; gap: 16px; padding: 18px 28px; border-radius: 14px; background: #16221a; border: 1px solid #2f5d3a; font-size: 22px; box-shadow: 0 30px 60px rgba(0,0,0,.5); }
+.toast .ok { width: 34px; height: 34px; border-radius: 50%; background: var(--green); color: #fff; display: grid; place-items: center; font-weight: 700; }
+
+/* ---------- code editor ---------- */
+.editor { position: absolute; border-radius: 14px; overflow: hidden; background: #0f1117; box-shadow: 0 50px 110px rgba(0,0,0,.65), 0 0 0 1px rgba(255,255,255,.07); }
+.editor .tabs { height: 50px; display: flex; background: #0a0b10; border-bottom: 1px solid #1f2230; }
+.editor .tabs span { padding: 0 26px; display: flex; align-items: center; gap: 8px; font-family: "JetBrains Mono"; font-size: 16px; color: #6f7690; border-right: 1px solid #1f2230; }
+.editor .tabs span.on { color: #e6e9f5; background: #0f1117; box-shadow: inset 0 2px 0 var(--gold); }
+.editor pre { padding: 26px 0; font-family: "JetBrains Mono"; font-size: 24px; line-height: 40px; color: #d6dbea; }
+.editor .row { display: flex; white-space: pre; padding-right: 30px; }
+.editor .row.hl { background: rgba(201,163,106,.14); box-shadow: inset 4px 0 0 var(--gold); }
+.editor .row u { text-decoration: none; width: 70px; padding-right: 22px; text-align: right; color: #3d4358; flex-shrink: 0; }
+.tk-kw { color: #c792ea; } .tk-str { color: #c3e88d; } .tk-num { color: #f78c6c; } .tk-com { color: #5c6680; font-style: italic; }
+.tk-prop { color: #82aaff; } .tk-sel { color: #ffcb6b; } .tk-tag { color: #f07178; } .tk-attr { color: #ffcb6b; } .tk-fn { color: #82aaff; } .tk-pun { color: #89ddff; }
+
+/* ---------- step card ---------- */
+.stepcard { background: #0b0806; }
+.stepcard .big { position: absolute; right: 40px; top: 50%; transform: translateY(-50%); font-family: "Cormorant Garamond"; font-weight: 600; font-size: 560px; line-height: 1;
+  color: transparent; -webkit-text-stroke: 2px rgba(201,163,106,.55); letter-spacing: -.02em; }
+.stepcard .lbl { position: absolute; left: 180px; top: 380px; }
+.stepcard .lbl .k { font-family: "Cormorant Garamond"; font-size: 40px; letter-spacing: .5em; color: var(--gold); }
+.stepcard .lbl h2 { font-family: "Shippori Mincho"; font-weight: 700; font-size: 108px; letter-spacing: .08em; margin-top: 18px; white-space: nowrap; }
+.stepcard .lbl p { font-family: "Cormorant Garamond"; font-style: italic; font-size: 36px; color: var(--muted); margin-top: 16px; letter-spacing: .06em; }
+.stepcard .rule { position: absolute; left: 180px; top: 350px; width: 700px; height: 2px; background: linear-gradient(90deg, var(--gold2), transparent); transform-origin: 0 0; }
+.stepcard .bg { position: absolute; inset: 0; background: radial-gradient(900px 600px at 70% 50%, rgba(201,163,106,.12), transparent 70%); }
+
+/* ---------- misc ---------- */
+.panel { position: absolute; background: linear-gradient(160deg, rgba(40,29,20,.95), rgba(18,13,10,.95)); border: 1px solid rgba(201,163,106,.45); border-radius: 10px; box-shadow: 0 40px 80px rgba(0,0,0,.5); }
+.pill { display: inline-block; padding: 10px 24px; border: 1px solid var(--gold); color: var(--gold2); border-radius: 999px; font-size: 26px; letter-spacing: .08em; margin: 0 8px; }
+.node { position: absolute; width: 230px; text-align: center; }
+.node .c { width: 150px; height: 150px; margin: 0 auto; border-radius: 50%; display: grid; place-items: center; background: radial-gradient(circle at 35% 30%, #3b2a1c, #150f0b); border: 2px solid var(--gold); box-shadow: 0 0 40px rgba(201,163,106,.25); }
+.node .c svg { width: 64px; height: 64px; }
+.node .s { font-family: "Cormorant Garamond"; color: var(--gold); font-size: 24px; letter-spacing: .3em; margin-top: 20px; }
+.node .j { font-family: "Shippori Mincho"; font-weight: 700; font-size: 32px; margin-top: 4px; white-space: nowrap; }
+.layer { position: absolute; left: 0; top: 0; width: 600px; height: 640px; border-radius: 10px; }
+.check { display: flex; align-items: center; gap: 22px; font-size: 38px; font-weight: 700; margin: 22px 0; font-family: "Noto Sans JP"; }
+.check i { width: 48px; height: 48px; border-radius: 50%; border: 2px solid var(--gold); display: grid; place-items: center; color: #1a120d; font-style: normal; font-size: 28px; position: relative; }
+.check i b { position: absolute; inset: -2px; border-radius: 50%; background: linear-gradient(135deg, #f3dca8, #b8894a); display: grid; place-items: center; transform: scale(0); }
+.check .n { font-family: "Cormorant Garamond"; color: var(--gold); font-size: 30px; width: 44px; }
+.laptop { position: absolute; }
+.laptop .scr { position: relative; width: 1000px; height: 640px; border-radius: 22px 22px 0 0; background: #0a0a0a; padding: 22px 22px 32px; box-shadow: 0 0 0 2px #333; }
+.laptop .scr img { width: 956px; height: 598px; border-radius: 4px; }
+.laptop .base { width: 1200px; height: 34px; margin-left: -100px; border-radius: 0 0 26px 26px; background: linear-gradient(#c9c9ce, #8a8a90); }
+.laptop .base::before { content: ""; display: block; width: 180px; height: 10px; margin: 0 auto; border-radius: 0 0 10px 10px; background: #77777c; }
+.leaf { position: absolute; width: 60px; height: 60px; }
+</style>
+</head>
+<body>
+<div id="stage">
+
+<!-- ============ S0 HOOK ============ -->
+<section class="scene" id="s-hook">
+  <div class="cam" id="hookCut1"><img class="shot abs" src="assets/hero_2.4.png" style="left:-900px;top:-500px;width:2880px"></div>
+  <div class="cam" id="hookCut2"><img class="shot abs" src="assets/lens_a.png" style="left:-1450px;top:-420px;width:3600px"></div>
+  <div class="cam" id="hookCut3" style="background:#0f1117">
+    <div class="editor" style="left:160px;top:180px;width:1600px;height:720px"><div class="tabs"><span class="on">index.html</span><span>style.css</span></div><pre id="hookCode"></pre></div>
+  </div>
+  <div class="cam" id="hookCut4" style="background:#0d0d0f"><div class="cx-composer" id="hookPrompt" style="left:260px;right:260px;top:380px;bottom:auto;font-size:40px;min-height:260px"></div></div>
+  <div class="cam" id="hookTitle">
+    <img class="shot abs" src="assets/hero_6.png" style="left:0;top:0;width:1920px;height:1200px;filter:blur(18px) brightness(.45)">
+    <div class="stamp" id="hookT1" style="top:44%"><div class="serif" style="font-size:150px;font-weight:700;letter-spacing:.1em">動く。のぞける。</div></div>
+    <div class="stamp" id="hookT2" style="top:44%"><div class="serif goldtext" style="font-size:190px;font-weight:800;letter-spacing:.06em">AIで、つくった。</div></div>
+    <div class="abs" id="hookBadge" style="left:50%;top:67%;transform:translateX(-50%)"><span class="tag dark" style="position:static;font-size:34px;padding:14px 34px">Codex × 日本語プロンプト</span></div>
+  </div>
+</section>
+
+<!-- ============ S1 SHOWCASE ============ -->
+<section class="scene" id="s-show">
+  <div class="cam" id="showCam">
+    <div class="browser" id="showBrowser" style="left:250px;top:92px;width:1420px">
+      <div class="bar"><i></i><i></i><i></i><div class="url">🔒 atelier-marron.example/</div></div>
+      <div class="view" style="width:1420px;height:888px"><iframe id="siteA" src="/montblanc-site/index.html" style="transform:scale(.98611)"></iframe></div>
+    </div>
+  </div>
+  <div id="showCallouts"></div>
+  <div class="stamp" id="showStamp" style="top:18%"><div class="tag" style="position:static;font-size:64px;padding:18px 48px;font-family:'Noto Sans JP';font-weight:900">中身が見える！</div></div>
+  <div class="abs" id="showSide" style="left:70px;top:420px">
+    <div class="tag dark" style="position:static;display:block;font-size:30px;margin-bottom:14px">Concept</div>
+    <div class="tag dark" style="position:static;display:block;font-size:30px;margin-bottom:14px">Menu</div>
+    <div class="tag dark" style="position:static;display:block;font-size:30px">Reserve</div>
+  </div>
+  <div class="cam" id="fan" style="perspective:1800px">
+    <img class="shot abs fanc" src="assets/sec_concept.png" style="left:560px;top:250px;width:800px;border-radius:10px;box-shadow:0 40px 80px #000">
+    <img class="shot abs fanc" src="assets/sec_menu.png" style="left:560px;top:250px;width:800px;border-radius:10px;box-shadow:0 40px 80px #000">
+    <img class="shot abs fanc" src="assets/lens_b.png" style="left:560px;top:250px;width:800px;border-radius:10px;box-shadow:0 40px 80px #000">
+  </div>
+</section>
+
+<!-- ============ S2 TITLE ============ -->
+<section class="scene" id="s-title" style="background:radial-gradient(1200px 800px at 50% 45%, #2c1e13, #0a0705 70%)">
+  <svg class="abs" id="titleRings" viewBox="0 0 1920 1080" style="inset:0;width:1920px;height:1080px">
+    <circle cx="960" cy="500" r="330" fill="none" stroke="rgba(201,163,106,.35)" stroke-width="1.5" pathLength="1" stroke-dasharray="1 1"/>
+    <circle cx="960" cy="500" r="380" fill="none" stroke="rgba(201,163,106,.18)" stroke-width="1" pathLength="1" stroke-dasharray="1 1"/>
+  </svg>
+  <div class="abs" id="titleSmall" style="left:0;right:0;top:250px;text-align:center"><span class="latin" style="font-size:34px;letter-spacing:.6em;color:var(--gold)">COMPLETE GUIDE</span></div>
+  <div class="abs" id="titleL1" style="left:0;right:0;top:320px;text-align:center" ><span class="serif" style="font-size:96px;font-weight:700;letter-spacing:.14em">Codexで作る</span></div>
+  <div class="abs" id="titleL2" style="left:0;right:0;top:450px;text-align:center"><span class="serif goldtext" id="titleGold" style="font-size:132px;font-weight:800;letter-spacing:.06em">“動く”パティスリーサイト</span></div>
+  <div class="abs" id="titleRule" style="left:560px;width:800px;top:650px;height:2px;background:linear-gradient(90deg,transparent,var(--gold2),transparent)"></div>
+  <div class="abs" id="titleChips" style="left:0;right:0;top:700px;text-align:center"><span class="pill">日本語で指示するだけ</span><span class="pill">HTML / CSS / JS</span><span class="pill">完全解説</span></div>
+</section>
+
+<!-- ============ S3 ROADMAP ============ -->
+<section class="scene" id="s-road" style="background:radial-gradient(1400px 900px at 50% 50%, #1f160f, #090605 75%)">
+  <div class="abs" style="left:0;right:0;top:110px;text-align:center" id="roadHead"><div class="latin" style="font-size:30px;letter-spacing:.5em;color:var(--gold)">ROADMAP</div><div class="serif" style="font-size:78px;font-weight:700;letter-spacing:.14em;margin-top:6px">全体の流れ</div></div>
+  <svg class="abs" viewBox="0 0 1920 1080" style="inset:0;width:1920px;height:1080px">
+    <path id="roadPath" d="M190 600 C 420 460, 560 740, 800 600 S 1180 460, 1340 600 S 1620 740, 1730 600" fill="none" stroke="url(#rg)" stroke-width="3" pathLength="1" stroke-dasharray="1 1" stroke-dashoffset="1"/>
+    <defs><linearGradient id="rg"><stop offset="0" stop-color="#8c6a36"/><stop offset=".5" stop-color="#ecd3a0"/><stop offset="1" stop-color="#8c6a36"/></linearGradient></defs>
+    <circle id="roadDot" r="10" fill="#fff3d6" style="filter:drop-shadow(0 0 12px #ffd98a)"/>
+  </svg>
+  <div id="roadNodes"></div>
+</section>
+
+<!-- ============ STEP CARDS ============ -->
+<div id="stepCards"></div>
+
+<!-- ============ S4 STEP1 : Codex project ============ -->
+<section class="scene" id="s-cx1">
+  <div class="cam" id="cx1Cam">
+    <div class="cx" id="cx1">
+      <div class="cx-top"><i></i><i></i><i></i><div class="t"><svg viewBox="0 0 24 24"><path d="M12 2l8.7 5v10L12 22l-8.7-5V7z" fill="none" stroke="#fff" stroke-width="1.6"/><path d="M8.5 10l3 2-3 2M13 14.5h3" stroke="#fff" stroke-width="1.6" fill="none" stroke-linecap="round"/></svg>Codex</div><div class="note">※画面はイメージです</div></div>
+      <div class="cx-body">
+        <aside class="cx-side">
+          <div class="cx-new" id="cx1New"><span style="font-size:22px">＋</span>新規プロジェクト</div>
+          <div class="cx-sec">プロジェクト</div>
+          <div class="cx-item on" id="cx1NewItem" style="opacity:0"><svg viewBox="0 0 20 20"><path d="M2 5h6l2 2h8v9H2z" fill="none" stroke="#fff" stroke-width="1.5"/></svg>Add Canva image magnifier demo</div>
+          <div class="cx-item"><svg viewBox="0 0 20 20"><path d="M2 5h6l2 2h8v9H2z" fill="none" stroke="#fff" stroke-width="1.5"/></svg>portfolio-site</div>
+          <div class="cx-item"><svg viewBox="0 0 20 20"><path d="M2 5h6l2 2h8v9H2z" fill="none" stroke="#fff" stroke-width="1.5"/></svg>cafe-menu-page</div>
+          <div class="cx-item"><svg viewBox="0 0 20 20"><path d="M2 5h6l2 2h8v9H2z" fill="none" stroke="#fff" stroke-width="1.5"/></svg>todo-app</div>
+        </aside>
+        <div class="cx-main"><div class="cx-chat">
+          <div class="cx-empty">何を作りましょう？<small>プロジェクトを選ぶか、新しく作成してください</small></div>
+          <div class="cx-composer"><span class="ph">Codexに依頼する…</span><div class="foot"><span class="chip">ローカル</span><span class="chip">GPT</span><span class="send"><svg width="18" height="18" viewBox="0 0 20 20"><path d="M10 16V4M5 9l5-5 5 5" stroke="#111" stroke-width="2.2" fill="none"/></svg></span></div></div>
+        </div></div>
+      </div>
+      <div class="abs" id="cx1Dim" style="inset:0;background:rgba(0,0,0,.55);opacity:0"></div>
+      <div class="cx-modal" id="cx1Modal">
+        <h4>新規プロジェクト</h4>
+        <div class="cx-field"><label>プロジェクト名</label><div class="in" id="cx1Name"></div></div>
+        <div class="cx-field"><label>フォルダ</label><div class="in" id="cx1Folder" style="color:#aab"><svg width="22" height="22" viewBox="0 0 20 20"><path d="M2 5h6l2 2h8v9H2z" fill="none" stroke="#aab" stroke-width="1.5"/></svg><span id="cx1FolderT">フォルダを選択…</span></div></div>
+        <div class="cx-btns"><span>キャンセル</span><span class="pri" id="cx1Create">作成</span></div>
+      </div>
+    </div>
+  </div>
+  <div class="panel" id="cx1Tip" style="right:70px;top:300px;width:560px;padding:40px 44px">
+    <div class="latin" style="color:var(--gold);font-size:24px;letter-spacing:.4em">POINT</div>
+    <div class="serif" style="font-size:44px;font-weight:700;margin:10px 0 24px">準備はこれだけ</div>
+    <div style="font-size:28px;line-height:2;font-weight:500">📁 1プロジェクト＝1フォルダ<br>✏️ 名前はあとで変えてOK<br>🔁 何度でも作り直せる</div>
+  </div>
+</section>
+
+<!-- ============ S5 STEP2 : prompt ============ -->
+<section class="scene" id="s-prompt" style="background:#08080a">
+  <div class="cam" id="prCam">
+    <div class="cx" style="left:110px;top:90px">
+      <div class="cx-top"><i></i><i></i><i></i><div class="t"><svg viewBox="0 0 24 24"><path d="M12 2l8.7 5v10L12 22l-8.7-5V7z" fill="none" stroke="#fff" stroke-width="1.6"/><path d="M8.5 10l3 2-3 2M13 14.5h3" stroke="#fff" stroke-width="1.6" fill="none" stroke-linecap="round"/></svg>Codex　/　Add Canva image magnifier demo</div><div class="note">※画面はイメージです</div></div>
+      <div class="cx-body"><div class="cx-main"><div class="cx-chat">
+        <div class="cx-composer" id="prBox" style="top:60px;bottom:60px;font-size:34px;line-height:1.8;padding:40px 50px"></div>
+        <div class="send abs" id="prSend" style="right:100px;bottom:84px;width:64px;height:64px;border-radius:50%;background:#f1f1f5;display:grid;place-items:center"><svg width="28" height="28" viewBox="0 0 20 20"><path d="M10 16V4M5 9l5-5 5 5" stroke="#111" stroke-width="2.2" fill="none"/></svg></div>
+      </div></div></div>
+    </div>
+  </div>
+  <div id="prPillars"></div>
+  <svg class="abs" id="prPlane" viewBox="0 0 100 100" style="width:120px;height:120px;left:1640px;top:840px;opacity:0"><path d="M5 50 L95 10 L70 90 L50 60 Z" fill="#fff"/><path d="M50 60 L95 10" stroke="#999" stroke-width="2"/></svg>
+</section>
+
+<!-- ============ S6 STEP3 : generation ============ -->
+<section class="scene" id="s-gen" style="background:#08080a">
+  <div class="cam" id="genCam">
+    <div class="cx" style="left:110px;top:90px">
+      <div class="cx-top"><i></i><i></i><i></i><div class="t"><svg viewBox="0 0 24 24"><path d="M12 2l8.7 5v10L12 22l-8.7-5V7z" fill="none" stroke="#fff" stroke-width="1.6"/><path d="M8.5 10l3 2-3 2M13 14.5h3" stroke="#fff" stroke-width="1.6" fill="none" stroke-linecap="round"/></svg>Codex　/　Add Canva image magnifier demo</div><div class="note">※画面はイメージです</div></div>
+      <div class="cx-body"><div class="cx-main">
+        <div class="cx-chat" style="padding:40px 50px">
+          <div class="bubble-u" style="font-size:18px">栗のモンブラン専門店『Atelier Marron』のLPを作って。黒×ゴールドで高級感のあるデザイン…</div>
+          <div class="agent" id="genSteps"></div>
+        </div>
+        <div class="cx-diff"><div class="hd">index.html <b id="genPlus">+0</b><s>−0</s></div><div class="lines" id="genLines"></div></div>
+      </div></div>
+    </div>
+  </div>
+  <div class="toast" id="genToast" style="left:50%;top:470px;transform:translateX(-50%)"><span class="ok">✓</span><span>変更を適用しました　<b class="mono" style="color:var(--green)">3 files +372</b></span></div>
+</section>
+
+<!-- code tour -->
+<section class="scene" id="s-code" style="background:radial-gradient(1200px 800px at 50% 50%, #151826, #07080c)">
+  <div class="cam" id="codeCam">
+    <div class="editor" style="left:120px;top:110px;width:1680px;height:860px">
+      <div class="tabs" id="codeTabs"><span class="on">index.html</span><span>style.css</span><span>script.js</span></div>
+      <pre id="codePre"></pre>
+    </div>
+  </div>
+  <div class="tag" id="codeTag" style="right:110px;top:70px">生成されたコードの中身</div>
+</section>
+
+<!-- ============ S7 STEP4 : animation ============ -->
+<section class="scene" id="s-anim" style="background:radial-gradient(1400px 900px at 60% 50%, #1e150e, #080605 75%)">
+  <div class="editor" id="animEd" style="left:80px;top:170px;width:860px;height:640px"><div class="tabs"><span class="on">style.css</span></div><pre id="animCode" style="font-size:26px;line-height:44px"></pre></div>
+  <div class="abs" id="animDia" style="left:1000px;top:170px;width:840px;height:640px">
+    <div class="panel" style="inset:0;position:absolute"></div>
+    <div class="abs latin" style="left:40px;top:28px;font-size:24px;letter-spacing:.35em;color:var(--gold)">STROKE-DASHOFFSET</div>
+    <svg class="abs" viewBox="0 0 840 640" style="inset:0;width:840px;height:640px">
+      <path d="M80 330 C 200 180, 330 480, 420 330 S 640 180, 760 330" fill="none" stroke="rgba(255,255,255,.12)" stroke-width="30" stroke-linecap="round"/>
+      <path id="animPath" d="M80 330 C 200 180, 330 480, 420 330 S 640 180, 760 330" fill="none" stroke="#9a6541" stroke-width="30" stroke-linecap="round" pathLength="1" stroke-dasharray="1 1" stroke-dashoffset="1"/>
+      <path id="animPath2" d="M80 330 C 200 180, 330 480, 420 330 S 640 180, 760 330" fill="none" stroke="#c89468" stroke-width="10" stroke-linecap="round" pathLength="1" stroke-dasharray="1 1" stroke-dashoffset="1"/>
+      <circle id="animNib" r="16" fill="#fff3d6" style="filter:drop-shadow(0 0 14px #ffd98a)"/>
+    </svg>
+    <div class="abs mono" style="left:40px;bottom:120px;font-size:34px;color:#fff">dashoffset: <b id="animVal" style="color:#ffd98a">1.00</b></div>
+    <div class="abs" style="left:40px;right:40px;bottom:70px;height:10px;background:rgba(255,255,255,.1);border-radius:5px"><i id="animBar" style="position:absolute;inset:0;border-radius:5px;background:linear-gradient(90deg,#8c6a36,#ecd3a0);transform-origin:0 0;transform:scaleX(0)"></i></div>
+  </div>
+  <div class="abs" id="animGantt" style="left:80px;top:170px;width:760px;height:640px">
+    <div class="panel" style="inset:0;position:absolute"></div>
+    <div class="abs latin" style="left:40px;top:28px;font-size:24px;letter-spacing:.35em;color:var(--gold)">34 STRANDS × DELAY</div>
+    <div class="abs" id="ganttRows" style="left:40px;top:90px;width:680px;height:500px"></div>
+  </div>
+  <div class="browser" id="animLive" style="left:900px;top:130px;width:940px">
+    <div class="bar"><i></i><i></i><i></i><div class="url">localhost:5500</div></div>
+    <div class="view" style="width:940px;height:720px"><iframe id="siteB" src="/montblanc-site/index.html" style="transform:translate(-610px,-60px) scale(1.05)"></iframe></div>
+  </div>
+  <div class="stamp" id="animFormula" style="top:50%">
+    <div style="display:flex;align-items:center;gap:40px">
+      <div class="panel" style="position:static;padding:40px 50px;font-size:56px;font-weight:900">線を“描く”</div>
+      <div class="latin" style="font-size:110px;color:var(--gold2)">×</div>
+      <div class="panel" style="position:static;padding:40px 50px;font-size:56px;font-weight:900">時間差</div>
+      <div class="latin" style="font-size:110px;color:var(--gold2)">=</div>
+      <div class="tag" style="position:static;padding:40px 50px;font-size:60px;font-weight:900">絞り出し</div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ S8 STEP5 : magnifier ============ -->
+<section class="scene" id="s-mag" style="background:radial-gradient(1400px 900px at 50% 45%, #22170f, #080605 75%)">
+  <div class="abs" id="magLayers" style="left:0;top:0;width:1920px;height:1080px;perspective:2400px">
+    <div class="abs" id="magStack" style="left:560px;top:150px;width:600px;height:640px;transform-style:preserve-3d">
+      <div class="layer" id="ly1" style="background:rgba(40,28,19,.92) url(assets/stage_out.png) center/contain no-repeat;border:3px solid #c9a36a;box-shadow:0 0 40px rgba(201,163,106,.25)"></div>
+      <div class="layer" id="ly2" style="background:rgba(40,28,19,.92) url(assets/stage_in.png) center/contain no-repeat;border:3px solid #c9a36a;box-shadow:0 0 40px rgba(201,163,106,.25)"></div>
+      <div class="layer" id="ly3" style="background:rgba(236,211,160,.06);border:2px dashed rgba(236,211,160,.7)"><div style="position:absolute;left:180px;top:200px;width:240px;height:240px;border-radius:50%;box-shadow:0 0 0 3px #ecd3a0, 0 0 0 2000px rgba(8,6,5,.55)"></div></div>
+    </div>
+    <div class="callout" id="lyL1" style="left:1340px;top:760px"><div class="box"><small>LAYER 1</small>外観の絵</div></div>
+    <div class="callout" id="lyL2" style="left:1340px;top:520px"><div class="box"><small>LAYER 2</small>断面の絵</div></div>
+    <div class="callout" id="lyL3" style="left:1340px;top:280px"><div class="box"><small>LAYER 3</small>丸い窓（clip-path）</div></div>
+  </div>
+  <div class="editor" id="magEd" style="left:90px;top:150px;width:1150px;height:560px"><div class="tabs"><span>style.css</span><span class="on">script.js</span></div><pre id="magCode" style="font-size:25px;line-height:44px"></pre></div>
+  <div class="browser" id="magLive" style="left:260px;top:80px;width:1400px">
+    <div class="bar"><i></i><i></i><i></i><div class="url">localhost:5500</div></div>
+    <div class="view" style="width:1400px;height:875px" id="magView"></div>
+  </div>
+  <div class="stamp" id="magStamp" style="top:14%"><div class="tag" style="position:static;font-size:56px;padding:18px 44px;font-weight:900">2枚重ねて、丸く切り抜くだけ</div></div>
+</section>
+
+<!-- ============ S9 STEP6 : refine ============ -->
+<section class="scene" id="s-refine" style="background:#08080a">
+  <div class="cam" id="rfCam">
+    <div class="cx" style="left:110px;top:90px">
+      <div class="cx-top"><i></i><i></i><i></i><div class="t"><svg viewBox="0 0 24 24"><path d="M12 2l8.7 5v10L12 22l-8.7-5V7z" fill="none" stroke="#fff" stroke-width="1.6"/><path d="M8.5 10l3 2-3 2M13 14.5h3" stroke="#fff" stroke-width="1.6" fill="none" stroke-linecap="round"/></svg>Codex　/　Add Canva image magnifier demo</div><div class="note">※画面はイメージです</div></div>
+      <div class="cx-body"><div class="cx-main"><div class="cx-chat" style="padding:50px 90px">
+        <div class="agent" style="margin:0 0 30px;color:#9a9aa5">✓ index.html を作成しました（+372）</div>
+        <div class="bubble-u" id="rfMsg" style="font-size:30px;max-width:1200px;min-height:60px"></div>
+        <div class="agent" id="rfReply" style="font-size:26px"><div class="step"><span class="ic">✓</span>レンズを 220px → 240px に拡大</div><div class="step"><span class="ic">✓</span>縁をゴールドのリングに変更</div><div class="step"><span class="ic">✓</span>のぞいている層の名前を表示 <code>+18 −4</code></div></div>
+      </div></div></div>
+    </div>
+  </div>
+  <div class="abs" id="baWrap" style="left:160px;top:120px;width:1600px;height:1000px">
+    <div class="abs" style="left:0;top:0;width:1600px;height:1000px;overflow:hidden;border-radius:14px;box-shadow:0 50px 100px #000">
+      <img class="shot abs" src="assets/lens_a.png" style="left:-1408px;top:-440px;width:3000px;max-width:none">
+      <div class="abs" id="baBefore" style="left:0;top:0;height:1000px;width:800px;overflow:hidden"><img class="shot abs" src="assets/lens_before.png" style="left:-1408px;top:-440px;width:3000px;max-width:none"></div>
+      <div class="abs" id="baLine" style="left:800px;top:0;width:4px;height:1000px;background:#fff;box-shadow:0 0 20px #000"><div style="position:absolute;left:-28px;top:470px;width:60px;height:60px;border-radius:50%;background:#fff;color:#111;display:grid;place-items:center;font-weight:900;font-size:22px">◀▶</div></div>
+      <div class="tag dark" style="left:30px;top:30px">BEFORE</div>
+      <div class="tag" style="right:30px;top:30px">AFTER</div>
+    </div>
+  </div>
+  <div class="abs" id="pubWrap" style="left:0;top:0;width:1920px;height:1080px;background:radial-gradient(1200px 800px at 50% 45%, #22170f, #080605 75%)">
+    <div class="abs" style="left:0;right:0;top:170px;text-align:center"><div class="latin" style="font-size:30px;letter-spacing:.5em;color:var(--gold)">PUBLISH</div><div class="serif" style="font-size:84px;font-weight:700;letter-spacing:.1em">あとは公開するだけ</div></div>
+    <div class="abs" id="pubRow" style="left:0;right:0;top:470px;display:flex;justify-content:center;gap:60px"></div>
+  </div>
+</section>
+
+<!-- ============ S10 OUTRO ============ -->
+<section class="scene" id="s-outro" style="background:radial-gradient(1400px 900px at 70% 50%, #24190f, #080605 75%)">
+  <div class="abs" id="recap" style="left:130px;top:170px">
+    <div class="latin" style="font-size:30px;letter-spacing:.5em;color:var(--gold)">RECAP</div>
+    <div class="serif" style="font-size:70px;font-weight:700;letter-spacing:.1em;margin:4px 0 26px">おさらい</div>
+    <div id="recapList"></div>
+  </div>
+  <div class="laptop" id="outLaptop" style="left:900px;top:250px;transform:scale(.88);transform-origin:0 0"><div class="scr"><img src="assets/lens_a.png"></div><div class="base"></div></div>
+  <div class="abs" id="finalWrap" style="inset:0">
+    <div class="abs" id="finalView" style="left:0;top:0;width:1920px;height:1080px;overflow:hidden"></div>
+    <div class="abs" style="inset:0;background:linear-gradient(90deg, rgba(8,6,5,.96) 0%, rgba(8,6,5,.88) 42%, transparent 64%)"></div>
+    <div class="abs" id="finalCopy" style="left:130px;top:330px">
+      <div class="serif" style="font-size:108px;font-weight:700;line-height:1.35;letter-spacing:.08em">あなたのお店も、<br><span class="goldtext">動かそう。</span></div>
+    </div>
+  </div>
+  <div class="abs" id="endCard" style="inset:0;background:#0a0705;display:grid;place-items:center;text-align:center">
+    <div>
+      <svg width="120" height="120" viewBox="0 0 40 40" id="endLogo"><path d="M20 5c7 4 14 11 14 19 0 7-6 11-14 11S6 31 6 24C6 16 13 9 20 5z" fill="none" stroke="#c9a36a" stroke-width="1" pathLength="1" stroke-dasharray="1 1"/><path d="M8 26c8 3 16 3 24 0" stroke="#c9a36a" stroke-width="1" fill="none" pathLength="1" stroke-dasharray="1 1"/></svg>
+      <div class="serif" style="font-size:72px;font-weight:700;letter-spacing:.12em;margin-top:26px">保存して、あとで作ってみよう</div>
+      <div style="margin-top:34px"><span class="pill">🔖 保存</span><span class="pill">👍 高評価</span><span class="pill">🔔 チャンネル登録</span></div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ GLOBAL OVERLAYS ============ -->
+<canvas id="dust" width="1920" height="1080"></canvas>
+<div id="vignette"></div>
+<canvas id="grain" width="480" height="270"></canvas>
+<div id="hud"><span class="num" id="hudNum">01</span><span class="track"><i id="hudBar"></i></span><span class="lab" id="hudLab"></span></div>
+<div id="brand">CODEX TUTORIAL</div>
+<div id="sub"></div>
+<div class="bars" id="bars"><i style="top:0"></i><i style="top:20%"></i><i style="top:40%"></i><i style="top:60%"></i><i style="top:80%"></i></div>
+<div id="wipe"></div>
+<div id="flash"></div>
+<div id="letterT"></div><div id="letterB"></div>
+<div class="ripple" id="ripple"></div>
+<svg id="cursor" viewBox="0 0 24 24"><path d="M4 2 L4 19 L8.5 15 L11.5 22 L14.5 20.8 L11.6 14 L18 14 Z" fill="#fff" stroke="#111" stroke-width="1.4" stroke-linejoin="round"/></svg>
+</div>
+
+<script src="node_modules/gsap/dist/gsap.min.js"></script>
+<script>
+// =====================================================================
+//  Deterministic timeline. window.seek(t) renders the exact frame at t.
+// =====================================================================
+const $ = s => document.querySelector(s);
+const tl = gsap.timeline({ paused: true });
+const drivers = [];          // functions (t) => void, run every frame
+const SFX = [];              // sound cue list consumed by the audio builder
+const sfx = (t, type, o = {}) => SFX.push({ t: +t.toFixed(3), type, ...o });
+const clamp = (v, a = 0, b = 1) => Math.min(b, Math.max(a, v));
+const lerp = (a, b, k) => a + (b - a) * k;
+const ease = k => k < .5 ? 4 * k * k * k : 1 - Math.pow(-2 * k + 2, 3) / 2;
+const easeOut = k => 1 - Math.pow(1 - k, 3);
+const prog = (t, a, b) => clamp((t - a) / (b - a));
+const esc = s => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+let DURATION = 0;
+
+function scene(sel, a, b) { tl.set(sel, { autoAlpha: 1 }, a); tl.set(sel, { autoAlpha: 0 }, b); DURATION = Math.max(DURATION, b); }
+function showEl(sel, a, b) { tl.set(sel, { autoAlpha: 1 }, a); if (b != null) tl.set(sel, { autoAlpha: 0 }, b); }
+function hideAt(sel, t) { tl.set(sel, { autoAlpha: 0 }, t); }
+
+// ---------- transitions ----------
+function flash(t, peak = .9, dur = .28) {
+  tl.fromTo("#flash", { opacity: 0 }, { opacity: peak, duration: dur * .3, ease: "power2.out" }, t - dur * .3)
+    .to("#flash", { opacity: 0, duration: dur * .7, ease: "power2.in" }, t);
+  sfx(t - .05, "hit");
+}
+function wipe(t) {   // gold diagonal sweep, cut happens at t
+  tl.fromTo("#wipe", { x: 0 }, { x: 3800, duration: .6, ease: "power2.inOut" }, t - .3);
+  sfx(t - .3, "whoosh");
+}
+function bars(t) {   // horizontal slices close then open, cut at t
+  const bs = gsap.utils.toArray("#bars i");
+  tl.fromTo(bs, { scaleX: 0, transformOrigin: "0 50%" }, { scaleX: 1, duration: .22, stagger: .03, ease: "power2.in", immediateRender: false }, t - .34)
+    .fromTo(bs, { scaleX: 1, transformOrigin: "100% 50%" }, { scaleX: 0, duration: .24, stagger: .03, ease: "power2.out", immediateRender: false }, t);
+  sfx(t - .34, "swish");
+}
+function zoomIn(sel, t) { tl.fromTo(sel, { scale: 1.25, filter: "blur(14px)" }, { scale: 1, filter: "blur(0px)", duration: .5, ease: "expo.out" }, t); sfx(t - .12, "whoosh"); }
+function zoomOut(sel, t) { tl.to(sel, { scale: 1.4, filter: "blur(16px)", duration: .3, ease: "power2.in" }, t - .3); }
+function iris(sel, t, x = "50%", y = "50%") {
+  tl.fromTo(sel, { clipPath: `circle(0% at ${x} ${y})` }, { clipPath: `circle(80% at ${x} ${y})`, duration: .7, ease: "power3.inOut" }, t);
+  tl.set(sel, { clipPath: "none" }, t + .71); sfx(t, "swish");
+}
+function glitch(sel, t, dur = .22) {
+  tl.to(sel, { keyframes: [
+    { x: -18, filter: "drop-shadow(8px 0 0 rgba(255,0,80,.7)) drop-shadow(-8px 0 0 rgba(0,220,255,.7))", duration: dur / 4 },
+    { x: 14, duration: dur / 4 }, { x: -6, duration: dur / 4 }, { x: 0, filter: "drop-shadow(0 0 0 rgba(0,0,0,0))", duration: dur / 4 }] }, t);
+  sfx(t, "glitch");
+}
+function shake(sel, t, amp = 14) {
+  tl.to(sel, { keyframes: [{ x: amp, y: -amp / 2, duration: .04 }, { x: -amp, y: amp / 2, duration: .04 }, { x: amp / 2, y: 0, duration: .04 }, { x: 0, y: 0, duration: .05 }] }, t);
+}
+
+// ---------- telops ----------
+function popIn(sel, t, from = { scale: 0, rotation: -8 }) { tl.fromTo(sel, { autoAlpha: 0, ...from }, { autoAlpha: 1, scale: 1, rotation: 0, x: 0, y: 0, duration: .45, ease: "back.out(2.2)" }, t); sfx(t, "pop"); }
+function stamp(sel, t, out) {
+  tl.fromTo(sel, { autoAlpha: 0, scale: 2.4 }, { autoAlpha: 1, scale: 1, duration: .22, ease: "power4.in" }, t);
+  shake("#stage", t + .22, 10); sfx(t + .2, "boom");
+  if (out != null) tl.to(sel, { autoAlpha: 0, scale: .9, duration: .2 }, out);
+}
+function callout(parent, x, y, dx, dy, title, text, t, out) {
+  const el = document.createElement("div"); el.className = "callout"; el.style.left = x + "px"; el.style.top = y + "px";
+  const len = Math.hypot(dx, dy);
+  el.innerHTML = `<div class="dot"></div><svg width="1" height="1"><path d="M0 0 L${dx} ${dy}" stroke="#ffd98a" stroke-width="3" stroke-dasharray="${len}" stroke-dashoffset="${len}"/></svg>
+    <div class="box" style="left:${dx + (dx < 0 ? -10 : 10)}px;top:${dy}px;transform:translate(${dx < 0 ? "-100%" : "0"},-50%)">${title ? `<small>${title}</small>` : ""}${text}</div>`;
+  $(parent).appendChild(el);
+  tl.set(el, { autoAlpha: 0 }, 0);
+  tl.set(el, { autoAlpha: 1 }, t);
+  tl.fromTo(el.querySelector(".dot"), { scale: 0 }, { scale: 1, duration: .3, ease: "back.out(3)" }, t);
+  tl.to(el.querySelector("path"), { strokeDashoffset: 0, duration: .3, ease: "power2.out" }, t + .08);
+  tl.fromTo(el.querySelector(".box"), { autoAlpha: 0, x: dx < 0 ? 30 : -30 }, { autoAlpha: 1, x: 0, duration: .35, ease: "power3.out" }, t + .25);
+  sfx(t, "pop");
+  if (out) tl.to(el, { autoAlpha: 0, duration: .2 }, out);
+  return el;
+}
+function charsIn(sel, t, stagger = .04) {
+  const el = $(sel); const target = el.querySelector("span, div") || el;
+  const txt = target.textContent; target.innerHTML = [...txt].map(c => `<i style="display:inline-block;font-style:normal">${c === " " ? "&nbsp;" : c}</i>`).join("");
+  tl.fromTo(target.querySelectorAll("i"), { autoAlpha: 0, y: 60, rotationX: -90 }, { autoAlpha: 1, y: 0, rotationX: 0, duration: .5, stagger, ease: "back.out(1.6)" }, t);
+}
+
+// ---------- subtitles ----------
+const SUBS = [];
+function sub(a, b, text) { SUBS.push([a, b, text]); }
+drivers.push(t => {
+  const s = SUBS.find(([a, b]) => t >= a && t < b); const el = $("#sub");
+  if (!s) { el.style.opacity = 0; return; }
+  if (el.dataset.k !== String(s[0])) { el.innerHTML = s[2]; el.dataset.k = s[0]; }
+  const k = easeOut(prog(t, s[0], s[0] + .18)), o = 1 - prog(t, s[1] - .12, s[1]);
+  el.style.opacity = Math.min(k, o); el.style.transform = `translateX(-50%) translateY(${(1 - k) * 18}px)`;
+});
+
+// ---------- typewriter ----------
+function highlight(code, lang) {
+  const rules = {
+    css: [["com", /\/\*.*?\*\//y], ["sel", /[.#@][\w-]+/y], ["prop", /[a-z-]+(?=\s*:)/y], ["num", /-?\d*\.?\d+(px|s|%|deg)?/y], ["str", /"[^"]*"/y], ["kw", /\b(to|from|forwards)\b/y], ["pun", /[{}();:,]/y]],
+    js: [["com", /\/\/.*/y], ["str", /`[^`]*`|"[^"]*"|'[^']*'/y], ["kw", /\b(const|let|for|of|return|function|new|=>)\b|=>/y], ["num", /\b\d*\.?\d+\b/y], ["fn", /[A-Za-z_]\w*(?=\()/y], ["pun", /[{}()[\];.,=+*<>]/y]],
+    html: [["com", /<!--.*?-->/y], ["tag", /<\/?[a-z0-9]+|\/?>/y], ["attr", /[a-z-]+(?==)/y], ["str", /"[^"]*"/y]],
+  }[lang];
+  const out = []; let i = 0, buf = "";
+  while (i < code.length) {
+    let hit = null;
+    for (const [c, re] of rules) { re.lastIndex = i; const m = re.exec(code); if (m && m[0].length) { hit = [c, m[0]]; break; } }
+    if (hit) { if (buf) { out.push([null, buf]); buf = ""; } out.push(hit); i += hit[1].length; }
+    else { buf += code[i]; i++; }
+  }
+  if (buf) out.push([null, buf]);
+  return out;
+}
+function renderCode(el, lines, n, { hl = [], caret = true, startLine = 1 } = {}) {
+  let left = n, html = "";
+  lines.forEach((toks, li) => {
+    let row = "";
+    for (const [c, s] of toks) {
+      if (left <= 0) break;
+      const part = s.slice(0, left); left -= part.length;
+      row += c ? `<span class="tk-${c}">${esc(part)}</span>` : esc(part);
+    }
+    const done = left > 0 || (left === 0 && li < lines.length);
+    const typing = left <= 0 && row !== undefined;
+    if (left > 0) left -= 1; // newline
+    html += `<div class="row${hl.includes(li + 1) ? " hl" : ""}"><u>${li + startLine}</u><span>${row}${caret && left <= 0 && !html.includes("caret") ? '<span class="caret"></span>' : ""}</span></div>`;
+  });
+  el.innerHTML = html;
+}
+function codeTyper(sel, code, lang, a, b, opts = {}) {
+  const lines = code.split("\n").map(l => highlight(l, lang)); const total = code.length;
+  const el = $(sel); let last = -1;
+  drivers.push(t => {
+    const hl = typeof opts.hl === "function" ? opts.hl(t) : (opts.hl || []);
+    const n = Math.round(total * prog(t, a, b)), key = n + "|" + hl.join(",");
+    if (key === last) return; last = key;
+    renderCode(el, lines, n, { ...opts, hl, caret: n < total });
+  });
+  // typing ticks for the sound track
+  sfx(a, "type", { dur: b - a });
+}
+function textTyper(sel, text, a, b, { marks = [], caret = true, placeholder = "" } = {}) {
+  const el = $(sel); let last = -1; const chars = [...text];
+  drivers.push(t => {
+    const n = Math.round(chars.length * prog(t, a, b)); const blink = caret && (Math.floor(t * 2.2) % 2 === 0 || n < chars.length);
+    const key = n + (blink ? "c" : ""); if (key === last) return; last = key;
+    let s = esc(chars.slice(0, n).join(""));
+    for (const m of marks) { const [w, at] = Array.isArray(m) ? m : [m, 0]; if (t >= (at || 0)) s = s.replace(esc(w), `<span class="mark">${esc(w)}</span>`); }
+    s = s.replace(/\n/g, "<br>");
+    el.innerHTML = (n === 0 && placeholder ? `<span class="ph">${placeholder}</span>` : s) + (blink && t >= a - .6 ? '<span class="caret"></span>' : "");
+  });
+  sfx(a, "type", { dur: b - a });
+}
+
+// ---------- cursor ----------
+const CUR = [];   // [t, x, y, visible]
+function cur(t, x, y, vis = 1, cam = null) { CUR.push([t, x, y, vis, cam]); }
+function camPt(cam, x, y) { if (!cam) return [x, y]; const c = $(cam), s = gsap.getProperty(c, "scale"); return [(x - 960) * s + 960 + gsap.getProperty(c, "x"), (y - 540) * s + 540 + gsap.getProperty(c, "y")]; }
+function click(t, x, y, cam) { tl.to("#cursor", { scale: .8, duration: .06, yoyo: true, repeat: 1 }, t - .02); sfx(t, "click"); RIP.push([t, x, y, cam]); }
+const RIP = [];
+drivers.push(t => {
+  const r = RIP.find(([a]) => t >= a && t < a + .45), el = $("#ripple");
+  if (!r) { el.style.opacity = 0; return; }
+  const k = easeOut((t - r[0]) / .45), [x, y] = camPt(r[3], r[1], r[2]);
+  el.style.left = x + "px"; el.style.top = y + "px"; el.style.opacity = 1 - k; el.style.transform = `scale(${.2 + 1.1 * k})`;
+});
+drivers.push(t => {
+  const el = $("#cursor");
+  let i = CUR.findIndex(k => k[0] > t);
+  if (i === -1) i = CUR.length;
+  const a = CUR[i - 1], b = CUR[i];
+  if (!a) { el.style.opacity = 0; return; }
+  let x = a[1], y = a[2], v = a[3];
+  if (b && b[3] && a[3]) { const k = ease(prog(t, a[0], b[0])); x = lerp(a[1], b[1], k); y = lerp(a[2], b[2], k); }
+  [x, y] = camPt(a[4], x, y);
+  el.style.opacity = v; el.style.left = (x - 8) + "px"; el.style.top = (y - 4) + "px";
+});
+
+// ---------- iframes (live demo site) ----------
+const SITE_SPEED = 1.25;   // demo site plays 1.25x faster so the piping feels snappy
+function siteDriver(frameSel, keys) {    // keys: [t, {st, lx, ly, on, sc}]  (linear interpolation, st = site time)
+  const fr = $(frameSel);
+  drivers.push(t => {
+    const w = fr.contentWindow; if (!w || !w.__mb) return;
+    if (!keys.length || t < keys[0][0] - 1 || t > keys[keys.length - 1][0] + 1) return;
+    let i = keys.findIndex(k => k[0] > t); if (i === -1) i = keys.length;
+    const a = keys[Math.max(0, i - 1)][1], b = (keys[i] || keys[i - 1])[1];
+    const k = keys[i] ? ease(prog(t, keys[i - 1] ? keys[i - 1][0] : 0, keys[i][0])) : 1;
+    const kl = keys[i] ? prog(t, keys[i - 1] ? keys[i - 1][0] : 0, keys[i][0]) : 1;
+    const st = lerp(a.st, b.st, kl), lx = lerp(a.lx ?? 300, b.lx ?? 300, k), ly = lerp(a.ly ?? 320, b.ly ?? 320, k), sc = lerp(a.sc || 0, b.sc || 0, k);
+    w.__mb.seek(st * SITE_SPEED); w.__mb.scroll(sc); w.__mb.lens(lx, ly, a.on && (b.on || kl < .02));
+  });
+}
+
+// ---------- discrete state switches (class / text) ----------
+function at(t, on, off) { let st = null; drivers.push(tt => { const v = tt >= t; if (v !== st) { st = v; (v ? on : off)(); } }); }
+function klass(sel, cls, a, b = 1e9) { const el = typeof sel === "string" ? $(sel) : sel; drivers.push(t => el.classList.toggle(cls, t >= a && t < b)); }
+// ---------- ambient layers ----------
+const dust = $("#dust").getContext("2d"); const FX = { dust: .8 };
+const P = Array.from({ length: 90 }, (_, i) => ({ x: (i * 977) % 1920, y: (i * 613) % 1080, r: .6 + (i % 5) * .5, s: 8 + (i % 7) * 5, ph: i * 1.7 }));
+drivers.push(t => {
+  dust.clearRect(0, 0, 1920, 1080); if (FX.dust <= 0) return;
+  for (const p of P) {
+    const y = (p.y - t * p.s + 2000) % 1080, x = p.x + Math.sin(t * .5 + p.ph) * 30;
+    const a = (.35 + .35 * Math.sin(t * 1.3 + p.ph)) * FX.dust;
+    dust.fillStyle = `rgba(255,222,160,${a})`; dust.beginPath(); dust.arc(x, y, p.r, 0, 7); dust.fill();
+  }
+});
+const grain = $("#grain").getContext("2d"); const gImg = grain.createImageData(480, 270);
+drivers.push(t => {
+  let s = Math.floor(t * 30) * 9301 + 49297;
+  for (let i = 0; i < gImg.data.length; i += 4) { s = (s * 9301 + 49297) % 233280; const v = s / 233280 * 255; gImg.data[i] = gImg.data[i + 1] = gImg.data[i + 2] = v; gImg.data[i + 3] = 255; }
+  grain.putImageData(gImg, 0, 0);
+});
+tl.to(FX, { dust: 0, duration: .01 }, 0);
+
+// ---------- HUD ----------
+const STEPS = ["プロジェクト作成", "プロンプトを書く", "コードを生成", "絞りアニメの仕組み", "虫眼鏡エフェクト", "仕上げ・公開"];
+function hud(n, a, b) {
+  drivers.push(t => { if (t >= a && t < b) { $("#hudNum").textContent = String(n).padStart(2, "0") + " / 06"; $("#hudLab").textContent = STEPS[n - 1]; } });
+  tl.fromTo("#hud", { autoAlpha: 0, x: -30 }, { autoAlpha: 1, x: 0, duration: .4 }, a);
+  tl.fromTo("#hudBar", { scaleX: (n - 1) / 6 }, { scaleX: n / 6, duration: b - a, ease: "none" }, a);
+  tl.to("#hud", { autoAlpha: 0, duration: .2 }, b - .2);
+}
+
+// ---------- step cards ----------
+function stepCard(n, jp, en, t, dur = 1.15) {
+  const el = document.createElement("section"); el.className = "scene stepcard"; el.id = "step" + n;
+  el.innerHTML = `<div class="bg"></div><div class="big">0${n}</div><div class="rule"></div><div class="lbl"><div class="k">STEP 0${n}</div><h2>${jp}</h2><p>${en}</p></div>`;
+  $("#stepCards").appendChild(el);
+  scene(el, t, t + dur);
+  tl.fromTo(el.querySelector(".big"), { x: 500, autoAlpha: 0 }, { x: 0, autoAlpha: 1, duration: .6, ease: "expo.out" }, t);
+  tl.to(el.querySelector(".big"), { x: -60, duration: dur, ease: "none" }, t + .6 - .001);
+  tl.fromTo(el.querySelector(".rule"), { scaleX: 0 }, { scaleX: 1, duration: .5, ease: "expo.out" }, t + .05);
+  tl.fromTo(el.querySelector(".k"), { autoAlpha: 0, x: -40 }, { autoAlpha: 1, x: 0, duration: .4 }, t + .08);
+  tl.fromTo(el.querySelector("h2"), { autoAlpha: 0, y: 70, clipPath: "inset(0 0 100% 0)" }, { autoAlpha: 1, y: 0, clipPath: "inset(0 0 0% 0)", duration: .5, ease: "expo.out" }, t + .12);
+  tl.fromTo(el.querySelector("p"), { autoAlpha: 0 }, { autoAlpha: 1, duration: .4 }, t + .35);
+  wipe(t); sfx(t + .1, "boom");
+}
+
+// =====================================================================
+//  S0  HOOK  0 – 7
+// =====================================================================
+scene("#s-hook", 0, 7.0);
+FX.dust = 0;
+tl.set(["#hookCut1", "#hookCut2", "#hookCut3", "#hookCut4", "#hookTitle"], { autoAlpha: 0 }, 0);
+showEl("#hookCut1", .15, .75); tl.fromTo("#hookCut1", { scale: 1.3 }, { scale: 1.05, duration: .6, ease: "power2.out" }, .15);
+showEl("#hookCut2", .75, 1.25); tl.fromTo("#hookCut2", { scale: 1.15, rotation: -4 }, { scale: 1, rotation: 0, duration: .5, ease: "power3.out" }, .75);
+showEl("#hookCut3", 1.25, 1.7); tl.fromTo("#hookCut3", { x: 180 }, { x: 0, duration: .45, ease: "expo.out" }, 1.25);
+showEl("#hookCut4", 1.7, 2.15); tl.fromTo("#hookCut4", { scale: .8 }, { scale: 1, duration: .45, ease: "expo.out" }, 1.7);
+codeTyper("#hookCode", `<div class="stage">\n  <svg id="outside"></svg>\n  <svg id="inside"></svg>\n  <div class="lens"></div>\n</div>`, "html", 1.25, 1.7);
+textTyper("#hookPrompt", "モンブランが動く、高級感のあるサイトを作って", 1.72, 2.1);
+[.15, .75, 1.25, 1.7].forEach(t => flash(t, .55, .18));
+showEl("#hookTitle", 2.15, 7);
+tl.fromTo("#hookTitle img", { scale: 1.2 }, { scale: 1, duration: 4.9, ease: "none" }, 2.15);
+tl.set(["#hookT1", "#hookT2", "#hookBadge"], { autoAlpha: 0 }, 0);
+showEl("#hookT1", 2.15, 4.2); charsIn("#hookT1", 2.2, .07);
+tl.to("#hookT1", { scale: 1.08, duration: 2, ease: "none" }, 2.2);
+glitch("#hookT1", 4.0);
+stamp("#hookT2", 4.2); flash(4.4, .8);
+popIn("#hookBadge", 4.9, { y: 40, scale: .8 });
+tl.to("#hookTitle", { scale: 1.6, autoAlpha: 0, filter: "blur(18px)", duration: .45, ease: "power3.in" }, 6.55);
+sfx(0, "riser", { dur: 2.1 });
+sub(.3, 2.1, "栗のクリームが、ひと筋ずつ<em>絞られていく</em>。");
+sub(2.1, 4.2, "カーソルを重ねると、<em>中身まで見える</em>サイト。");
+sub(4.2, 7.0, "これ全部、<em>Codex</em>に日本語で頼んで作りました。");
+
+// =====================================================================
+//  S1  SHOWCASE  7 – 22.4
+// =====================================================================
+scene("#s-show", 7.0, 22.4);
+tl.to(FX, { dust: .8, duration: .5 }, 7.0);
+tl.fromTo("#showBrowser", { y: 700, rotationX: 28, transformPerspective: 2000, scale: .8 }, { y: 0, rotationX: 0, scale: 1, duration: .9, ease: "expo.out" }, 7.0);
+sfx(7.0, "whoosh");
+siteDriver("#siteA", [
+  [7.1, { st: 0 }], [12.3, { st: 5.2 }], [13.2, { st: 6.1 }],
+  [13.35, { st: 6.25, on: 1, lx: 300, ly: 340 }], [14.4, { st: 7.3, on: 1, lx: 305, ly: 350 }], [15.1, { st: 8, on: 1, lx: 300, ly: 196 }],
+  [15.8, { st: 8.7, on: 1, lx: 215, ly: 270 }], [16.5, { st: 9.4, on: 1, lx: 330, ly: 452 }], [17.3, { st: 10.2, on: 1, lx: 380, ly: 500 }],
+  [17.45, { st: 10.35, on: 0, lx: 380, ly: 500 }], [17.6, { st: 10.5, sc: 0 }], [20.4, { st: 13.3, sc: 2300 }], [22.4, { st: 15.3, sc: 2300 }],
+]);
+// camera: push in on the cake, back out, then into the lens
+tl.fromTo("#showCam", { scale: 1, x: 0, y: 0 }, { scale: 1.55, x: -520, y: 60, duration: 1.1, ease: "power3.inOut" }, 7.35);
+callout("#showCallouts", 780, 830, -250, -170, "POINT 1", "クリームを“絞る”アニメ", 8.45, 12.2);
+callout("#showCallouts", 985, 420, 260, -120, "POINT 2", "マロンが落ちてくる", 9.5, 12.2);
+callout("#showCallouts", 1090, 710, 250, 100, "POINT 3", "粉糖がキラッ", 10.1, 12.2);
+tl.to("#showCam", { scale: 1, x: 0, y: 0, duration: .7, ease: "power3.inOut" }, 12.25);
+// cursor enters (screen coords: stage origin ≈ (1004, 227) at scale 1 in this layout)
+const SX = x => 250 + (759.5 + x) * .98611, SY = y => 92 + 46 + (130 + y) * .98611, SC = "#showCam";
+cur(12.4, 1900, 900, 0, SC); cur(12.45, 1900, 900, 1, SC); cur(13.3, SX(300), SY(340), 1, SC); cur(14.4, SX(305), SY(350), 1, SC); cur(15.1, SX(300), SY(196), 1, SC);
+cur(15.8, SX(215), SY(270), 1, SC); cur(16.5, SX(330), SY(452), 1, SC); cur(17.3, SX(380), SY(500), 1, SC); cur(17.5, 1900, 700, 1, SC); cur(17.55, 1900, 700, 0, SC);
+tl.to("#showCam", { scale: 1.75, x: -700, y: -30, duration: 1.1, ease: "power3.inOut" }, 13.5);
+tl.to("#showCam", { x: -700, y: 160, duration: 2.6, ease: "sine.inOut" }, 14.6);
+tl.to("#showCam", { scale: 1, x: 0, y: 0, duration: .6, ease: "power3.inOut" }, 17.2);
+tl.set("#showStamp", { autoAlpha: 0 }, 0); stamp("#showStamp", 13.45, 15.0);
+sfx(13.35, "shimmer");
+// scroll tour
+tl.set("#showSide", { autoAlpha: 0 }, 0);
+tl.fromTo("#showSide .tag", { autoAlpha: 0, x: -80 }, { autoAlpha: 1, x: 0, stagger: .6, duration: .35, ease: "back.out(2)" }, 17.9);
+tl.set("#showSide", { autoAlpha: 1 }, 17.9); tl.to("#showSide", { autoAlpha: 0, duration: .2 }, 20.3);
+// fan of screenshots
+tl.set("#fan", { autoAlpha: 0 }, 0); showEl("#fan", 20.45);
+tl.to("#showCam", { scale: .7, autoAlpha: 0, duration: .4, ease: "power2.in" }, 20.3);
+const fanC = gsap.utils.toArray(".fanc");
+tl.fromTo(fanC, { rotationY: 0, x: 0, y: 500, autoAlpha: 0 }, { y: 0, autoAlpha: 1, duration: .45, stagger: .08, ease: "expo.out" }, 20.45);
+tl.to(fanC, { x: i => (i - 1) * 520, rotationY: i => (1 - i) * 22, rotation: i => (i - 1) * 4, z: i => i === 1 ? 100 : 0, duration: .6, ease: "power3.out" }, 20.75);
+tl.to(fanC, { x: 0, rotation: 0, rotationY: 0, scale: .2, autoAlpha: 0, duration: .45, ease: "power3.in" }, 21.9);
+sfx(20.45, "swish");
+sub(7.2, 9.6, "完成したのが、こちらの店舗サイト。");
+sub(9.6, 12.3, "開いた瞬間、モンブランが<em>くるくる絞られて</em>いきます。");
+sub(12.3, 14.4, "そして、カーソルを重ねると…");
+sub(14.4, 17.5, "虫眼鏡のように、<em>断面がのぞける</em>んです！");
+sub(17.5, 20.4, "スクロールすれば、こだわり・メニュー・予約まで。");
+sub(20.4, 22.4, "今日はこのサイトの作り方を、<em>全部</em>見せます。");
+
+// =====================================================================
+//  S2  TITLE  22.4 – 27.2
+// =====================================================================
+scene("#s-title", 22.4, 27.2);
+flash(22.4, 1, .4);
+tl.to("#titleRings circle", { strokeDashoffset: 0, duration: 1.4, stagger: .15, ease: "power2.inOut" }, 22.5);
+tl.fromTo("#titleRings circle", { strokeDashoffset: 1 }, { strokeDashoffset: 1, duration: 0, immediateRender: true }, 0);
+tl.fromTo("#titleRings", { rotation: -30, transformOrigin: "960px 500px" }, { rotation: 20, duration: 4.8, ease: "none" }, 22.4);
+tl.fromTo("#titleSmall", { autoAlpha: 0, letterSpacing: "0em" }, { autoAlpha: 1, duration: .6 }, 22.55);
+charsIn("#titleL1", 22.7, .05);
+tl.fromTo("#titleL2", { autoAlpha: 0, scale: 1.4, filter: "blur(20px)" }, { autoAlpha: 1, scale: 1, filter: "blur(0px)", duration: .7, ease: "expo.out" }, 23.3);
+sfx(23.3, "boom");
+tl.fromTo("#titleGold", { backgroundPosition: "100% 0" }, { backgroundPosition: "-100% 0", duration: 2.4, ease: "power1.inOut" }, 23.6);
+tl.fromTo("#titleRule", { scaleX: 0 }, { scaleX: 1, duration: .8, ease: "expo.out" }, 23.7);
+tl.fromTo("#titleChips .pill", { autoAlpha: 0, y: 30 }, { autoAlpha: 1, y: 0, stagger: .18, duration: .4, ease: "back.out(2)" }, 24.1);
+sfx(24.1, "pop"); sfx(24.28, "pop"); sfx(24.46, "pop");
+tl.to("#s-title .abs, #titleRings", { scale: 1.1, duration: 2.2, ease: "none" }, 25);
+bars(27.2);
+sub(22.8, 27.0, "Codexで作る、<em>動くパティスリーサイト</em>。完全解説です。");
+
+// =====================================================================
+//  S3  ROADMAP  27.2 – 34.2
+// =====================================================================
+scene("#s-road", 27.2, 34.2);
+const ICONS = [
+  '<path d="M6 18h20l6 6h26v28H6z" fill="none" stroke="#ecd3a0" stroke-width="3"/>',
+  '<path d="M8 12h48v30H26l-12 10V42H8z" fill="none" stroke="#ecd3a0" stroke-width="3"/><path d="M18 24h28M18 32h18" stroke="#ecd3a0" stroke-width="3"/>',
+  '<path d="M22 16L8 32l14 16M42 16l14 16-14 16M36 12l-8 40" fill="none" stroke="#ecd3a0" stroke-width="3.5" stroke-linecap="round"/>',
+  '<path d="M6 40c8-20 16-20 22 0s14 20 30-8" fill="none" stroke="#ecd3a0" stroke-width="3.5" stroke-linecap="round"/><circle cx="58" cy="32" r="4" fill="#ecd3a0"/>',
+  '<circle cx="27" cy="27" r="17" fill="none" stroke="#ecd3a0" stroke-width="3.5"/><path d="M40 40l16 16" stroke="#ecd3a0" stroke-width="6" stroke-linecap="round"/>',
+  '<path d="M32 6l6 18 18 2-14 11 5 19-15-10-15 10 5-19L8 26l18-2z" fill="none" stroke="#ecd3a0" stroke-width="3" stroke-linejoin="round"/>',
+];
+const NODE_POS = [[190, 600], [498, 610], [800, 600], [1100, 520], [1340, 600], [1630, 640]];
+NODE_POS.forEach(([x, y], i) => {
+  const n = document.createElement("div"); n.className = "node"; n.style.left = (x - 115) + "px"; n.style.top = (y - 75) + "px";
+  n.innerHTML = `<div class="c"><svg viewBox="0 0 64 64">${ICONS[i]}</svg></div><div class="s">STEP 0${i + 1}</div><div class="j">${STEPS[i]}</div>`;
+  $("#roadNodes").appendChild(n);
+  popIn(n, 28.0 + i * .62, { scale: 0, y: 40 });
+});
+tl.fromTo("#roadHead", { autoAlpha: 0, y: -40 }, { autoAlpha: 1, y: 0, duration: .5, ease: "expo.out" }, 27.35);
+tl.to("#roadPath", { strokeDashoffset: 0, duration: 3.8, ease: "none" }, 27.9);
+const roadPath = $("#roadPath"); const RL = roadPath.getTotalLength();
+drivers.push(t => { const k = prog(t, 27.9, 31.7); const p = roadPath.getPointAtLength(k * RL); $("#roadDot").setAttribute("cx", p.x); $("#roadDot").setAttribute("cy", p.y); });
+tl.to("#s-road .node", { y: -12, duration: .5, stagger: { each: .1, yoyo: true, repeat: 1 }, ease: "sine.inOut" }, 32.2);
+tl.fromTo("#s-road", { scale: 1 }, { scale: 1.03, duration: 7, ease: "none" }, 27.2);
+sub(27.4, 30.8, "流れはたったの<em>6ステップ</em>。");
+sub(30.8, 34.1, "順番に、実際の画面で見ていきましょう。");
+
+// =====================================================================
+//  STEP 01  Codex project  34.2 – 44.4
+// =====================================================================
+stepCard(1, "プロジェクトを作る", "Create a project", 34.2);
+scene("#s-cx1", 35.35, 44.4);
+hud(1, 35.4, 44.4);
+zoomIn("#cx1", 35.35);
+tl.set(["#cx1Modal", "#cx1Tip"], { autoAlpha: 0 }, 0);
+const pos = (sel, fx = .5, fy = .5) => { const r = $(sel).getBoundingClientRect(); return [r.left + r.width * fx, r.top + r.height * fy]; };
+const C1 = "#cx1Cam", pNew = pos("#cx1New", .3), pName = pos("#cx1Name", .8), pFold = pos("#cx1Folder", .35), pCreate = pos("#cx1Create");
+cur(35.5, 1500, 900, 0, C1); cur(35.55, 1500, 900, 1, C1); cur(36.3, ...pNew, 1, C1); cur(36.9, ...pNew, 1, C1);
+click(36.4, ...pNew, C1);
+tl.to("#cx1Dim", { opacity: 1, duration: .25 }, 36.5);
+popIn("#cx1Modal", 36.5, { scale: .85 }); tl.set("#cx1Modal", { xPercent: -50, yPercent: -50, left: "50%", top: "50%", x: 0, y: 0 }, 0);
+cur(37.0, pName[0] - 200, pName[1], 1, C1); cur(37.05, pName[0] - 200, pName[1], 0, C1);
+klass("#cx1Name", "focus", 37.0, 39.0);
+textTyper("#cx1Name", "Add Canva image magnifier demo", 37.1, 38.9);
+tl.to("#cx1Cam", { scale: 1.45, x: 0, y: 40, duration: .8, ease: "power3.inOut" }, 37.0);
+{ const [x, y] = [(pName[0] + 90 - 960) * 1.45 + 960, (pName[1] - 540) * 1.45 + 580]; callout("#s-cx1", x, y, 60, -150, "", "名前は何でもOK", 38.3, 39.6); }
+cur(39.1, pFold[0] - 100, pFold[1] + 150, 1, C1); cur(39.5, ...pFold, 1, C1); click(39.55, ...pFold, C1);
+klass("#cx1Folder", "focus", 39.6); at(39.75, () => $("#cx1FolderT").textContent = "~/Sites/montblanc-lp", () => $("#cx1FolderT").textContent = "フォルダを選択…"); sfx(39.75, "pop");
+{ const [x, y] = [(pFold[0] + 150 - 960) * 1.45 + 960, (pFold[1] - 540) * 1.45 + 580]; callout("#s-cx1", x, y, 120, 130, "", "空のフォルダを選ぶ", 39.8, 40.6); }
+tl.to("#cx1Cam", { scale: 1, y: 0, duration: .7, ease: "power3.inOut" }, 40.6);
+cur(41.2, ...pCreate, 1, C1); click(41.3, ...pCreate, C1);
+tl.to(["#cx1Modal", "#cx1Dim"], { autoAlpha: 0, duration: .2 }, 41.45);
+tl.fromTo("#cx1NewItem", { autoAlpha: 0, x: -30 }, { autoAlpha: 1, x: 0, duration: .35 }, 41.6); sfx(41.6, "ding");
+cur(41.8, 1300, 1000, 1, C1); cur(41.85, 1300, 1000, 0, C1);
+tl.to("#cx1Cam", { x: -330, scale: .92, duration: .6, ease: "power3.inOut" }, 42.0);
+tl.fromTo("#cx1Tip", { autoAlpha: 0, x: 200 }, { autoAlpha: 1, x: 0, duration: .5, ease: "expo.out" }, 42.1); sfx(42.1, "whoosh");
+sub(34.4, 36.3, "STEP1、まずは<em>Codexでプロジェクト</em>を作ります。");
+sub(36.3, 39.7, "「新規プロジェクト」から、名前を入力して…");
+sub(39.7, 42.0, "保存する<em>フォルダを選ぶだけ</em>。");
+sub(42.0, 44.3, "これで準備はOKです。");
+
+// =====================================================================
+//  STEP 02  prompt  44.4 – 57.6
+// =====================================================================
+stepCard(2, "プロンプトを書く", "Write the prompt", 44.4);
+scene("#s-prompt", 45.55, 57.6);
+hud(2, 45.6, 57.6);
+iris("#s-prompt", 45.55, "50%", "80%");
+const PROMPT = "栗のモンブラン専門店『Atelier Marron』のLPを作って。\n・黒×ゴールドで高級感のあるデザイン\n・ヒーローのモンブランは、クリームが絞られるように描かれるアニメーション\n・カーソルを重ねると、虫眼鏡で断面が見えるエフェクト\n・コンセプト／メニュー／予約のセクション";
+textTyper("#prBox", PROMPT, 45.8, 51.4, { marks: [["モンブラン専門店", 47.2], ["LP", 47.3], ["黒×ゴールド", 48.6], ["高級感", 48.8], ["絞られるように描かれる", 50.0], ["虫眼鏡で断面が見える", 50.4]] });
+tl.fromTo("#prCam", { scale: 1.25, y: 180, x: 150 }, { scale: 1.25, y: -60, x: 150, duration: 5.6, ease: "none" }, 45.8);
+tl.to("#prCam", { scale: .62, x: -520, y: 0, duration: .7, ease: "power3.inOut" }, 51.5);
+const PILLARS = [["01", "目的", "何のサイト？", "モンブラン専門店のLP"], ["02", "雰囲気", "どんな印象？", "黒×ゴールド・高級感"], ["03", "動き", "どう動く？", "絞りアニメ＋虫眼鏡"]];
+PILLARS.forEach(([n, h, q, a], i) => {
+  const d = document.createElement("div"); d.className = "panel"; d.style.cssText = `left:1110px;top:${170 + i * 245}px;width:720px;height:210px;padding:30px 40px;display:flex;gap:34px;align-items:center`;
+  d.innerHTML = `<div class="latin" style="font-size:96px;color:var(--gold2);line-height:1">${n}</div><div><div style="font-size:24px;color:var(--muted);font-weight:500">${q}</div><div class="serif" style="font-size:54px;font-weight:700;letter-spacing:.08em">${h}</div><div style="font-size:26px;font-weight:700;color:#ffd98a;margin-top:4px">${a}</div></div>`;
+  $("#prPillars").appendChild(d); popIn(d, 52.0 + i * .55, { x: 200, scale: .9 });
+});
+tl.set("#prPlane", { autoAlpha: 0 }, 0);
+tl.to("#prPillars", { autoAlpha: 0, x: 200, duration: .3 }, 55.4);
+tl.to("#prCam", { scale: 1, x: 0, y: 0, duration: .5, ease: "power3.inOut" }, 55.4);
+const pSend = pos("#prSend");
+cur(55.8, 1200, 1000, 1, "#prCam"); cur(56.3, ...pSend, 1, "#prCam"); click(56.4, ...pSend, "#prCam"); cur(56.6, ...pSend, 1, "#prCam"); cur(56.65, ...pSend, 0, "#prCam");
+tl.fromTo("#prPlane", { autoAlpha: 1, x: 0, y: 0, rotation: 0 }, { x: 600, y: -900, rotation: -20, duration: .7, ease: "power2.in" }, 56.5);
+sfx(56.5, "whoosh");
+tl.to("#prBox", { autoAlpha: 0, y: -60, duration: .35 }, 56.5);
+sub(45.7, 48.4, "STEP2、作りたいサイトを<em>日本語で</em>伝えます。");
+sub(48.4, 51.5, "コツは、<em>目的・雰囲気・動き</em>の3つを入れること。");
+sub(51.5, 55.5, "「黒×ゴールド」「高級感」など、<em>雰囲気の言葉</em>が効きます。");
+sub(55.5, 57.5, "書けたら、送信！");
+
+// =====================================================================
+//  STEP 03  generation  57.6 – 70.2
+// =====================================================================
+stepCard(3, "コードを生成", "Let Codex build it", 57.6);
+scene("#s-gen", 58.75, 66.3);
+hud(3, 58.8, 70.2);
+zoomIn("#genCam", 58.75);
+const GSTEPS = ["要件を整理しています", "<code>index.html</code> を作成", "SVGでモンブランを描画", "絞りアニメーションを追加", "虫眼鏡エフェクトを実装", "レイアウトを調整"];
+GSTEPS.forEach((s, i) => {
+  const d = document.createElement("div"); d.className = "step"; d.innerHTML = `<span class="ic spin"></span><span>${s}</span>`;
+  $("#genSteps").appendChild(d);
+  const t0 = 59.0 + i * .75;
+  tl.fromTo(d, { autoAlpha: 0, x: -20 }, { autoAlpha: 1, x: 0, duration: .25 }, t0);
+  const ic = d.querySelector(".ic"); at(t0 + .6, () => { ic.className = "ic"; ic.textContent = "✓"; }, () => { ic.className = "ic spin"; ic.textContent = ""; }); sfx(t0 + .6, "tick");
+  tl.fromTo(d.querySelector(".ic"), { rotation: 0 }, { rotation: 360, duration: .6, ease: "none" }, t0);
+});
+const DIFF = `<!doctype html>|<html lang="ja">|<head>|  <meta charset="utf-8">|  <title>Atelier Marron｜和栗のモンブラン</title>|  <style>|  :root {|    --bg: #15100c;|    --gold: #c9a36a;|  }|  .hero { display: grid; }|  .stage { position: relative; }|  #inside { clip-path: circle(0); }|  .lens { border-radius: 50%; }|  .strand {|    stroke-dasharray: 1 1;|    stroke-dashoffset: 1;|    animation: pipe .6s forwards;|  }|  @keyframes pipe {|    to { stroke-dashoffset: 0; }|  }|  .marron { animation: drop .8s; }|  </style>|</head>|<body>|<nav>…</nav>|<header class="hero">|  <h1>栗が、ほどける。</h1>|  <div class="stage" id="stage">|    <svg id="outside"></svg>|    <svg id="inside"></svg>|    <div class="lens"></div>|  </div>|</header>|<section id="concept">…</section>|<section id="menu">…</section>|<script>|  const K = 34;|  for (let k = 0; k < K; k++) {|    // 絞りの1本ずつをSVGで生成|  }|  stage.onpointermove = …|<\/script>`.split("|");
+$("#genLines").innerHTML = DIFF.map((l, i) => `<div class="ln"><u>${i + 1}</u>+ ${esc(l)}</div>`).join("");
+drivers.push(t => {
+  const k = prog(t, 59.3, 63.8); const n = Math.floor(k * DIFF.length);
+  $("#genLines").style.transform = `translateY(${-Math.max(0, n - 30) * 25}px)`;
+  [...$("#genLines").children].forEach((c, i) => c.style.visibility = i < n ? "visible" : "hidden");
+  $("#genPlus").textContent = "+" + Math.round(easeOut(prog(t, 59.3, 64.2)) * 372);
+});
+tl.to("#genCam", { scale: 1.22, x: -380, y: 50, duration: 1.2, ease: "power3.inOut" }, 61.2);
+tl.to("#genCam", { scale: 1, x: 0, y: 0, duration: .6, ease: "power3.inOut" }, 64.0);
+tl.set("#genToast", { autoAlpha: 0 }, 0); popIn("#genToast", 64.6, { y: 60, scale: .8 }); sfx(64.6, "ding");
+tl.to("#genToast", { autoAlpha: 0, duration: .2 }, 66.1);
+// code tour: three quick cuts
+scene("#s-code", 66.3, 70.2);
+glitch("#s-code", 66.3);
+const CODE1 = `<header class="hero">\n  <h1>栗が、<em>ほどける。</em></h1>\n  <div class="stage" id="stage">\n    <svg id="outside"></svg>  <!-- 外観 -->\n    <svg id="inside"></svg>   <!-- 断面 -->\n    <div class="lens"></div>\n  </div>\n</header>`;
+const CODE2 = `:root {\n  --bg: #15100c;     /* 深いブラウン */\n  --gold: #c9a36a;   /* ゴールド */\n}\n.lens {\n  border-radius: 50%;\n  box-shadow: 0 0 0 2px #e8cf9c;\n}`;
+const CODE3 = `const K = 34;  // 絞りの本数\nfor (let k = 0; k < K; k++) {\n  const delay = 0.35 + k * 0.075;\n  strands += makeStrand(k, delay);\n}\nstage.addEventListener("pointermove", onMove);`;
+const cut = [[CODE1, "html", 66.3, 67.6, 0], [CODE2, "css", 67.6, 68.9, 1], [CODE3, "js", 68.9, 70.2, 2]];
+cut.forEach(([c, lang, a, b, tab]) => {
+  const lines = c.split("\n").map(l => highlight(l, lang));
+  drivers.push(t => {
+    if (t < a || t >= b) return;
+    renderCode($("#codePre"), lines, Math.round(c.length * prog(t, a, a + .9)), { caret: true });
+    [...$("#codeTabs").children].forEach((s, i) => s.className = i === tab ? "on" : "");
+  });
+  sfx(a, "type", { dur: .9 });
+  if (a > 66.3) { flash(a, .5, .16); }
+});
+tl.fromTo("#codeCam", { scale: 1.02 }, { scale: 1.12, duration: 3.9, ease: "none" }, 66.3);
+tl.set("#codeTag", { autoAlpha: 0 }, 0); popIn("#codeTag", 66.5, { x: 100 });
+sub(58.9, 61.4, "STEP3、あとは<em>Codexが考えて、書いてくれます</em>。");
+sub(61.4, 64.5, "構成を決めて、ファイルを作って、コードを書く。");
+sub(64.5, 66.3, "しばらく待つと…<em>完成！</em>");
+sub(66.3, 70.1, "中身は <em>HTML・CSS・JavaScript</em> の3つです。");
+
+// =====================================================================
+//  STEP 04  animation  70.2 – 82.4
+// =====================================================================
+stepCard(4, "絞りアニメの仕組み", "How the piping works", 70.2);
+scene("#s-anim", 71.35, 82.4);
+hud(4, 71.4, 82.4);
+tl.set(["#animGantt", "#animLive", "#animFormula"], { autoAlpha: 0 }, 0);
+tl.fromTo("#animEd", { autoAlpha: 0, x: -300 }, { autoAlpha: 1, x: 0, duration: .5, ease: "expo.out" }, 71.35);
+tl.fromTo("#animDia", { autoAlpha: 0, x: 300 }, { autoAlpha: 1, x: 0, duration: .5, ease: "expo.out" }, 71.45);
+sfx(71.35, "whoosh");
+codeTyper("#animCode", `.strand {\n  stroke-dasharray: 1 1;\n  stroke-dashoffset: 1;\n  animation: pipe .6s forwards;\n}\n@keyframes pipe {\n  to { stroke-dashoffset: 0; }\n}`, "css", 71.6, 73.4,
+  { hl: t => t < 73.6 ? [] : t < 75.3 ? [3, 7] : [4] });
+const animP = $("#animPath"), animP2 = $("#animPath2"), APL = animP.getTotalLength();
+drivers.push(t => {
+  const loopT = t < 73.6 ? 0 : ((t - 73.6) % 1.9) / 1.4;
+  const k = ease(clamp(loopT));
+  animP.style.strokeDashoffset = 1 - k; animP2.style.strokeDashoffset = 1 - clamp(k * 1.02);
+  const p = animP.getPointAtLength(k * APL); $("#animNib").setAttribute("cx", p.x); $("#animNib").setAttribute("cy", p.y);
+  $("#animVal").textContent = (1 - k).toFixed(2); $("#animBar").style.transform = `scaleX(${k})`;
+});
+callout("#s-anim", 760, 395, 180, 250, "", "1 → 0 で線が伸びる", 74.0, 76.2);
+// stagger / gantt
+tl.to(["#animEd", "#animDia"], { autoAlpha: 0, y: 40, duration: .3 }, 76.3);
+showEl("#animGantt", 76.4); showEl("#animLive", 76.5);
+tl.fromTo("#animGantt", { x: -200 }, { x: 0, duration: .5, ease: "expo.out" }, 76.4);
+tl.fromTo("#animLive", { x: 300, rotationY: -20, transformPerspective: 1600 }, { x: 0, rotationY: 0, duration: .6, ease: "expo.out" }, 76.5);
+sfx(76.4, "swish");
+const GR = 17; let gh = "";
+for (let i = 0; i < GR; i++) gh += `<div style="position:absolute;left:0;top:${i * 29}px;height:18px;width:100%"><i class="gb" style="position:absolute;left:${i * 22}px;width:190px;height:18px;border-radius:9px;background:linear-gradient(90deg,#6f4428,#c89468);transform-origin:0 50%;transform:scaleX(0)"></i></div>`;
+$("#ganttRows").innerHTML = gh + `<div id="gPlay" style="position:absolute;top:-10px;bottom:-10px;width:2px;background:#ffd98a;box-shadow:0 0 12px #ffd98a"></div>`;
+drivers.push(t => {
+  const st = clamp((t - 76.6) * SITE_SPEED, 0, 3.4);  // site-time analogue
+  document.querySelectorAll(".gb").forEach((b, i) => { const d = .35 + i * .15; b.style.transform = `scaleX(${clamp((st - d) / .6)})`; });
+  $("#gPlay").style.left = (st / 3.4 * 600) + "px";
+});
+siteDriver("#siteB", [[76.6, { st: 0 }], [79.3, { st: 2.72 }], [80.4, { st: 3.8 }]]);
+sfx(76.7, "shimmer");
+tl.to(["#animGantt", "#animLive"], { autoAlpha: 0, scale: .9, duration: .3 }, 80.1);
+showEl("#animFormula", 80.3);
+tl.fromTo("#animFormula > div > *", { autoAlpha: 0, y: 80 }, { autoAlpha: 1, y: 0, stagger: .14, duration: .35, ease: "back.out(2)" }, 80.3);
+stamp("#animFormula .tag", 80.95);
+sub(71.5, 73.6, "STEP4、クリームの<em>“絞り”</em>の仕組み。");
+sub(73.6, 76.3, "線をなぞって描く <em>stroke-dashoffset</em> を使います。");
+sub(76.3, 80.2, "それを<em>34本</em>、少しずつ時間をずらして再生。");
+sub(80.2, 82.3, "すると、<em>絞り出している</em>ように見えるんです。");
+
+// =====================================================================
+//  STEP 05  magnifier  82.4 – 96.6
+// =====================================================================
+stepCard(5, "虫眼鏡エフェクト", "The magnifier lens", 82.4);
+scene("#s-mag", 83.55, 96.6);
+hud(5, 83.6, 96.6);
+tl.set(["#magEd", "#magLive", "#magStamp", "#lyL1", "#lyL2", "#lyL3"], { autoAlpha: 0 }, 0);
+tl.set("#magStack", { rotationX: 52, rotationZ: -32, z: 0 }, 0);
+tl.fromTo("#ly1", { z: 0 }, { z: 0, duration: 0, immediateRender: true }, 0);
+tl.fromTo("#magStack", { scale: .6, autoAlpha: 0 }, { scale: .95, autoAlpha: 1, duration: .6, ease: "expo.out" }, 83.6);
+tl.fromTo("#ly2", { z: 0, autoAlpha: 0 }, { z: 220, autoAlpha: 1, duration: .6, ease: "expo.out" }, 84.3);
+tl.fromTo("#ly3", { z: 0, autoAlpha: 0 }, { z: 440, autoAlpha: 1, duration: .6, ease: "expo.out" }, 85.1);
+popIn("#lyL1", 83.9, { x: 60 }); popIn("#lyL2", 84.5, { x: 60 }); popIn("#lyL3", 85.3, { x: 60 });
+sfx(84.3, "swish"); sfx(85.1, "swish");
+tl.to("#ly3 > div", { left: 120, top: 280, duration: 1.2, ease: "sine.inOut", yoyo: true, repeat: 1 }, 86.0);
+tl.to(["#ly2", "#ly3"], { z: 0, duration: .6, ease: "power3.in" }, 88.3);
+tl.to("#magStack", { rotationX: 0, rotationZ: 0, scale: 1, duration: .6, ease: "power3.inOut" }, 88.3);
+tl.to(["#lyL1", "#lyL2", "#lyL3"], { autoAlpha: 0, duration: .2 }, 88.3);
+flash(88.9, .6);
+tl.to("#magLayers", { autoAlpha: 0, duration: .15 }, 88.9);
+showEl("#magEd", 88.9);
+tl.fromTo("#magEd", { y: 100 }, { y: 0, duration: .4, ease: "expo.out" }, 88.9);
+codeTyper("#magCode", `stage.addEventListener("pointermove", e => {\n  const x = e.offsetX, y = e.offsetY;\n  // カーソル位置で、断面を丸く切り抜く\n  inside.style.clipPath =\n    \`circle(120px at \${x}px \${y}px)\`;\n  inside.style.transform = "scale(1.45)";\n});`, "js", 89.1, 90.6, { hl: t => t < 90.8 ? [] : t < 92.0 ? [4, 5] : [6] });
+callout("#s-mag", 1000, 380, 280, -150, "", "カーソル位置で丸く切り抜く", 90.9, 92.1);
+callout("#s-mag", 870, 420, 420, 200, "", "少し拡大してレンズ感", 92.0, 93.0);
+tl.to("#magEd", { autoAlpha: 0, x: -200, duration: .25 }, 93.0);
+// live demo reusing the second iframe: move it into this scene's browser mockup
+showEl("#magLive", 93.1);
+zoomIn("#magLive", 93.1);
+stamp("#magStamp", 93.4, 96.3);
+sub(83.7, 85.9, "STEP5、いよいよ<em>虫眼鏡エフェクト</em>。");
+sub(85.9, 88.9, "実は、<em>外観と断面の2枚の絵</em>を重ねているだけ。");
+sub(88.9, 93.0, "カーソルの位置で、断面を<em>丸く切り抜いて</em>少し拡大。");
+sub(93.0, 96.5, "これで、中身をのぞけるレンズの完成です。");
+
+// =====================================================================
+//  STEP 06  refine & publish  96.6 – 107.2
+// =====================================================================
+stepCard(6, "仕上げ・公開", "Refine & publish", 96.6);
+scene("#s-refine", 97.75, 107.2);
+hud(6, 97.8, 107.2);
+tl.set(["#baWrap", "#pubWrap", "#rfReply"], { autoAlpha: 0 }, 0);
+zoomIn("#rfCam", 97.75);
+textTyper("#rfMsg", "レンズをもう少し大きくして、縁をゴールドに。のぞいた場所の名前も表示して。", 98.0, 100.0, { marks: [["もう少し大きく", 99.0], ["縁をゴールドに", 99.5], ["名前も表示", 100.0]] });
+showEl("#rfReply", 100.25);
+tl.fromTo("#rfReply .step", { autoAlpha: 0, x: -20 }, { autoAlpha: 1, x: 0, stagger: .3, duration: .25 }, 100.3);
+sfx(100.3, "tick"); sfx(100.6, "tick"); sfx(100.9, "tick");
+tl.to("#rfCam", { scale: 1.2, y: -40, duration: 2.8, ease: "none" }, 98);
+// before / after
+bars(101.6);
+tl.set("#rfCam", { autoAlpha: 0 }, 101.6); showEl("#baWrap", 101.6, 104.6);
+drivers.push(t => { const k = ease(prog(t, 101.9, 104.2)); const x = lerp(1450, 150, k); $("#baBefore").style.width = x + "px"; $("#baLine").style.left = x + "px"; });
+// publish
+iris("#pubWrap", 104.6); showEl("#pubWrap", 104.6);
+const PUB = [["🌐", "GitHub Pages"], ["⚡", "Netlify"], ["▲", "Vercel"]];
+PUB.forEach(([ic, n], i) => {
+  const d = document.createElement("div"); d.className = "panel"; d.style.cssText = "position:relative;width:360px;height:260px;display:grid;place-items:center;text-align:center";
+  d.innerHTML = `<div><div style="font-size:90px">${ic}</div><div class="latin" style="font-size:40px;color:var(--gold2);letter-spacing:.06em">${n}</div></div>`;
+  $("#pubRow").appendChild(d); popIn(d, 105.1 + i * .22, { y: 80, scale: .7 });
+});
+sub(97.9, 100.2, "STEP6、気になるところは<em>日本語で追加注文</em>。");
+sub(100.2, 101.6, "Codexがすぐに直してくれます。");
+sub(101.6, 104.6, "ビフォー・アフター。<em>何度でも</em>作り直せます。");
+sub(104.6, 107.1, "完成したら、好きなサービスで<em>公開</em>するだけ。");
+
+// =====================================================================
+//  OUTRO  107.2 – 117
+// =====================================================================
+scene("#s-outro", 107.2, 117);
+wipe(107.2);
+tl.set(["#finalWrap", "#endCard"], { autoAlpha: 0 }, 0);
+STEPS.forEach((s, i) => {
+  const d = document.createElement("div"); d.className = "check"; d.innerHTML = `<span class="n">0${i + 1}</span><i><b>✓</b></i><span>${s}</span>`;
+  $("#recapList").appendChild(d);
+  const t0 = 107.6 + i * .42;
+  tl.fromTo(d, { autoAlpha: 0, x: -60 }, { autoAlpha: 1, x: 0, duration: .3, ease: "expo.out" }, t0);
+  tl.to(d.querySelector("b"), { scale: 1, duration: .3, ease: "back.out(3)" }, t0 + .15); sfx(t0 + .15, "tick");
+});
+tl.fromTo("#outLaptop", { autoAlpha: 0, y: 200, rotationX: 30, transformPerspective: 2000 }, { autoAlpha: 1, y: 0, rotationX: 0, duration: .8, ease: "expo.out" }, 107.4);
+tl.to("#outLaptop", { y: -20, duration: 3, ease: "sine.inOut" }, 108.2);
+// final live shot: move siteA into the full-bleed view
+showEl("#finalWrap", 111.0); flash(111.0, .9, .35);
+tl.fromTo("#finalView", { scale: 1.25 }, { scale: 1.05, duration: 3.5, ease: "power2.out" }, 111.0);
+tl.fromTo("#finalCopy > div", { autoAlpha: 0, y: 60, filter: "blur(10px)" }, { autoAlpha: 1, y: 0, filter: "blur(0px)", duration: .9, ease: "expo.out" }, 111.4);
+tl.fromTo("#finalCopy .goldtext", { backgroundPosition: "100% 0" }, { backgroundPosition: "-100% 0", duration: 2.5 }, 111.8);
+sfx(111.4, "shimmer");
+showEl("#endCard", 114.4);
+tl.fromTo("#endCard", { autoAlpha: 0 }, { autoAlpha: 1, duration: .5 }, 114.4);
+tl.to("#endLogo path", { strokeDashoffset: 0, duration: 1.2, ease: "power2.inOut" }, 114.5);
+tl.fromTo("#endLogo path", { strokeDashoffset: 1 }, { strokeDashoffset: 1, duration: 0, immediateRender: true }, 0);
+tl.fromTo("#endCard .serif", { autoAlpha: 0, y: 30 }, { autoAlpha: 1, y: 0, duration: .6 }, 114.8);
+tl.fromTo("#endCard .pill", { autoAlpha: 0, y: 30 }, { autoAlpha: 1, y: 0, stagger: .15, duration: .4, ease: "back.out(2)" }, 115.2);
+tl.to("#stage", { opacity: 0, duration: .8 }, 116.2);
+sub(107.4, 111.0, "おさらい。この<em>6ステップ</em>で、動く店舗サイトが作れます。");
+sub(111.0, 114.4, "あなたのお店のサイトも、<em>Codex</em>で動かしてみませんか？");
+DURATION = 117;
+
+// Brand/letterbox accents
+tl.fromTo("#brand", { autoAlpha: 0 }, { autoAlpha: 1, duration: .4 }, 7.2);
+tl.to("#brand", { autoAlpha: 0, duration: .3 }, 107);
+
+// Magnifier live demo & final shot use their own frames (loaded lazily below).
+function addFrame(id, parentSel, style) {
+  const f = document.createElement("iframe"); f.id = id; f.src = "/montblanc-site/index.html"; f.style.cssText = style; $(parentSel).appendChild(f); return f;
+}
+addFrame("siteC", "#magView", "border:0;width:1440px;height:900px;transform-origin:0 0;transform:scale(.97222)");
+addFrame("siteD", "#finalView", "border:0;width:1440px;height:900px;transform-origin:0 0;transform:translate(-160px,-60px) scale(1.45)");
+// Magnifier live demo cursor path (siteC)
+{
+  const ox = 260 + 718 * .97222, oy = 80 + 46 + 130 * .97222, s = .97222;
+  const P = [[93.6, 300, 340], [94.3, 300, 196], [95.0, 215, 270], [95.7, 330, 452], [96.4, 380, 500]];
+  siteDriver("#siteC", [[93.1, { st: 6, on: 0, lx: 300, ly: 340 }], [93.5, { st: 6.4, on: 1, lx: 300, ly: 340 }], ...P.map(([t, x, y]) => [t, { st: t - 87, on: 1, lx: x, ly: y }])]);
+  cur(93.1, 1700, 950, 0); cur(93.15, 1700, 950, 1); P.forEach(([t, x, y]) => cur(t, ox + x * s, oy + y * s)); cur(96.55, ox + 380 * s, oy + 500 * s, 0);
+  tl.fromTo("#magLive", { scale: 1 }, { scale: 1.12, duration: 3.4, ease: "none" }, 93.2);
+}
+siteDriver("#siteD", [[110.9, { st: 6, on: 1, lx: 250, ly: 300 }], [112.5, { st: 7.6, on: 1, lx: 320, ly: 350 }], [114.4, { st: 9.5, on: 1, lx: 300, ly: 200 }]]);
+
+// cursor keyframes must be sorted
+CUR.sort((a, b) => a[0] - b[0]);
+SFX.sort((a, b) => a.t - b.t);
+
+window.DURATION = DURATION;
+window.SFX = SFX;
+window.seek = t => { tl.seek(t, false); for (const d of drivers) d(t); };
+window.framesReady = () => [...document.querySelectorAll("iframe")].every(f => f.contentWindow && f.contentWindow.__mb);
+seek(0);
+</script>
+</body>
+</html>
