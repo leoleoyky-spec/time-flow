@@ -18,6 +18,7 @@ time-flow/
 ├── js/motion-words.js   # Japanese text → motion sliders / whole-sticker settings (browser + Node)
 ├── js/bg-remove.js      # Background removal on raw RGBA pixels (browser + Node)
 ├── js/parts.js          # Moving one traced part: rubber-like bend mesh, joint guess (browser + Node)
+├── js/sprite.js         # Frame art: sprite-sheet grid finding, jitter alignment, frame counts (browser + Node)
 ├── js/app.js            # UI state, preview, export, localStorage persistence
 ├── test/                # node:test unit tests for the browser+Node modules
 └── package.json         # npm scripts (no dependencies)
@@ -60,6 +61,17 @@ Two features worth knowing about when touching `js/app.js` or `js/animations.js`
   where the picture and text sit (including the user's drag offsets `textPos`/`imagePos`, as
   fractions of the sticker size); both drawing and the preview's drag hit-test use it. Text can be
   curved along an arc (`textCurve`, −100 smile … 100 arch) and tilted (`textRotate`).
+
+- **Frame art** (`sticker.mode === 'frames'`): for motions the app can't make from one picture
+  (walking, winking, anything), an image AI draws the poses. The 画像 tab builds the request to
+  paste into ChatGPT/Gemini (`buildSpritePrompt()` in `js/motion-words.js`), and imports the
+  result: a sprite sheet (grid found by `findGrid()`, which tries grids whose cut lines run through
+  empty space with even, square-ish frames), several frame images / GIF / APNG (via
+  `ImageDecoder` where available), or a video (frames seeked out of a `<video>`). `makeFrames()` in
+  `js/app.js` puts them on one canvas, steadies AI jitter with `alignFrames()` (bounded shift so a
+  jump survives), trims, and stores `frameImages` + per-frame `frameAdj` nudges. The app itself
+  still calls no AI. Pictures are kept in IndexedDB (`idb:<key>` refs in the localStorage JSON)
+  because frames outgrow localStorage.
 
 ## Development Workflow
 

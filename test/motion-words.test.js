@@ -170,3 +170,14 @@ test('wink words', () => {
   assert.strictEqual(parsePartRequest('まばたきする').name, '目');
   assert.strictEqual(parsePartMotion('目をつぶる').cfg.type, 'wink');
 });
+
+test('buildSpritePrompt asks for a looping, aligned grid on a white background', () => {
+  const { buildSpritePrompt } = require('../js/motion-words.js');
+  const p = buildSpritePrompt({ action: '歩く', frames: 8, withImage: true, character: '白黒のパンダ', text: 'おさんぽ' });
+  assert.match(p, /添付した画像のキャラクター（白黒のパンダ）が「歩く」/);
+  assert.match(p, /4列×2行、全8コマ/);
+  assert.match(p, /ループする/);
+  assert.match(p, /真っ白/);
+  assert.match(p, /「おさんぽ」という文字/);
+  assert.match(buildSpritePrompt({ action: 'ウインク', frames: 9 }), /3列×3行、全9コマ/);
+});

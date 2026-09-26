@@ -349,9 +349,45 @@
     return parsePartRequests(text)[0] || null;
   }
 
+
+  // ---- asking an image AI to draw the frames ("スプライトシート") ----
+
+  const SHEET_LAYOUTS = { 4: [2, 2], 6: [3, 2], 8: [4, 2], 9: [3, 3], 12: [4, 3], 16: [4, 4] };
+
+  /**
+   * The request to paste into ChatGPT / Gemini so it draws every pose of a motion on
+   * one picture. The app then cuts the picture into frames. Any motion the image AI can
+   * draw works this way (walking, winking, jumping…), without an AI inside the app.
+   * @param {{character?: string, action: string, frames?: number, withImage?: boolean, text?: string}} o
+   */
+  function buildSpritePrompt(o) {
+    const n = SHEET_LAYOUTS[o.frames] ? o.frames : 8;
+    const [cols, rows] = SHEET_LAYOUTS[n];
+    const who = o.withImage
+      ? `添付した画像のキャラクター${o.character ? `（${o.character}）` : ''}`
+      : o.character || 'かわいいキャラクター';
+    const action = (o.action || '').trim() || '手を振る';
+    const lines = [
+      `${who}が「${action}」動きをする、LINEアニメーションスタンプ用のスプライトシートを1枚描いてください。`,
+      '',
+      '【条件】',
+      `・${cols}列×${rows}行、全${n}コマを格子状に並べる。左上から右へ、上の段から下の段の順に動きが進む`,
+      '・1コマ目から最後のコマまでで動きが1回分。最後のコマから1コマ目へ自然につながる（ループする）',
+      '・どのコマも、キャラクターの大きさ・向き・画角・絵のタッチを完全に同じにする',
+      '・キャラクターの体の中心と足元の位置を、すべてのコマでそろえる',
+      `・動かすのは「${action}」に必要な部分だけ。それ以外の部分は、すべてのコマでまったく同じ絵にする`,
+      '・各コマは正方形。コマとコマの間には、十分な白い余白をあける',
+      '・背景は真っ白（#FFFFFF）の単色。影・グラデーション・枠線・コマ番号は入れない',
+    ];
+    if (o.text && o.text.trim()) lines.push(`・各コマに「${o.text.trim()}」という文字を、すべて同じ位置・同じ大きさで入れる`);
+    else lines.push('・文字は入れない');
+    lines.push(`・画像全体の縦横比は ${cols}:${rows}`);
+    return lines.join('\n');
+  }
+
   const EXAMPLES = ['大きく跳ねる', 'ゆっくり左右にゆれる', '速くぶるぶる震える', 'ドキドキ大きくなる', 'くるくる回る', 'ぺこりとおじぎ', 'ふわふわ浮かぶ', '手を振る'];
 
-  const api = { parseMotionText, parseInstruction, parsePartRequest, parsePartRequests, parsePartMotion, EXAMPLES, WISH_EXAMPLES };
+  const api = { parseMotionText, parseInstruction, parsePartRequest, parsePartRequests, parsePartMotion, buildSpritePrompt, SHEET_LAYOUTS, EXAMPLES, WISH_EXAMPLES };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.MotionWords = api;
 })(typeof window !== 'undefined' ? window : globalThis);

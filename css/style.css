@@ -140,6 +140,8 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .status { min-height: 1.6em; font-size: 13px; color: var(--muted); margin: 8px 0 0; }
 
 .editor label { display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: var(--muted); }
+.editor label.btn { display: inline-flex; flex-direction: row; align-items: center; color: var(--accent-ink); font-size: 13px; }
+.editor label.btn.ghost { color: var(--ink); }
 .editor label.color { flex-direction: row; align-items: center; justify-content: space-between; }
 .editor textarea, .editor select {
   width: 100%; border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; background: var(--bg);
@@ -206,6 +208,32 @@ button, input, select, textarea { font: inherit; color: inherit; }
   width: 100%; max-width: 280px; border-radius: 8px; display: block; touch-action: none; cursor: crosshair;
   background: repeating-conic-gradient(var(--checker-a) 0 25%, var(--checker-b) 0 50%) 0 0 / 12px 12px;
 }
+.ai-box { padding: 12px; border-radius: 12px; background: var(--accent-soft); display: grid; gap: 8px; margin-top: 12px; }
+.panel .ai-box h2 { margin: 0; }
+.ai-box .hint { margin: 0; }
+.ai-box input[type="text"], .ai-box select, #aiPrompt {
+  width: 100%; border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; background: var(--panel); font-size: 14px;
+}
+#aiPrompt { font-size: 12px; line-height: 1.5; resize: vertical; }
+.editor label.check { flex-direction: row; align-items: center; gap: 6px; color: var(--ink); accent-color: var(--accent); }
+.import-buttons { display: flex; flex-wrap: wrap; gap: 6px; }
+#frameTools { display: grid; gap: 8px; margin-top: 12px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--bg); }
+#frameTools .hint { margin: 0; }
+.hint.strong { color: var(--ink); font-weight: 700; }
+.frame-strip { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 4px; }
+.frame-thumb {
+  flex: 0 0 auto; width: 56px; padding: 2px; border: 2px solid transparent; border-radius: 8px; cursor: pointer; position: relative;
+  background: repeating-conic-gradient(var(--checker-a) 0 25%, var(--checker-b) 0 50%) 0 0 / 8px 8px;
+}
+.frame-thumb[aria-current="true"] { border-color: var(--accent); }
+.frame-thumb img { width: 100%; height: 44px; object-fit: contain; display: block; }
+.frame-thumb span { position: absolute; top: 1px; left: 4px; font-size: 10px; font-weight: 700; color: var(--muted); }
+#frameEdit {
+  width: 100%; max-width: 280px; border-radius: 8px; display: block;
+  background: repeating-conic-gradient(var(--checker-a) 0 25%, var(--checker-b) 0 50%) 0 0 / 12px 12px;
+}
+.frame-buttons { display: flex; flex-wrap: wrap; gap: 4px; }
+.ai-offer { margin-top: 6px; }
 .custom-panel { margin-top: 8px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--bg); }
 output { color: var(--ink); font-weight: 700; }
 

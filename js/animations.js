@@ -258,6 +258,9 @@
       imagePos: [0, 0],
       custom: { wave: 'smooth', path: 'line', speed: 1, moveX: 0, moveY: 22, rotate: 6, zoom: 6, pause: 0, squash: 0, text: '' },
       bg: { enabled: false, tolerance: 25, color: null }, // color: null = auto-detect from the corners
+      mode: 'single', // 'single': one picture moved by the app; 'frames': frame art (sheet, images, video)
+      frameImages: [], // data URLs, all the same size
+      frameAdj: [], // per frame { x, y, s }: nudge as fractions of the frame, and scale
       parts: [], // traced parts that move on their own: { poly: [[x,y]...], pivot: [x,y], cfg: {type, amount, speed} } in 0–1 image coords
     };
   }
@@ -347,8 +350,9 @@
    * @param {object} sticker
    * @param {number} t  0 <= t < 1
    * @param {HTMLImageElement|null} img  decoded sticker.image
-   * @param {{img, base, mesh, parts}|null} [layers]  when some parts of the picture
-   *   move on their own: `base` is the picture without the bent cells (see js/parts.js)
+   * @param {{img, base, mesh, parts}|{adjust}|null} [layers]  when some parts of the picture
+   *   move on their own (`base` is the picture without the bent cells, see js/parts.js),
+   *   or, for frame art, the current frame's position fix
    */
   function drawFrame(ctx, sticker, t, W, H, img, layers) {
     ctx.clearRect(0, 0, W, H);
@@ -366,7 +370,12 @@
 
     if (lay.image) {
       const { x: x0, y: y0, w: iw, h: ih } = lay.image;
-      if (layers) {
+      if (layers && layers.adjust) {
+        // A frame of frame art, with its per-frame nudge (fractions of the frame) and scale.
+        const a = layers.adjust;
+        const s = a.s || 1;
+        ctx.drawImage(img, x0 + (a.x || 0) * iw - ((s - 1) * iw) / 2, y0 + (a.y || 0) * ih - ((s - 1) * ih) / 2, iw * s, ih * s);
+      } else if (layers) {
         // Everything the parts don't touch, then the touched cells bent like rubber.
         ctx.drawImage(layers.base, x0, y0, iw, ih);
         drawBentCells(ctx, layers, t, x0, y0, iw / layers.mesh.w);

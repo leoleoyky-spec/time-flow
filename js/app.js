@@ -3,9 +3,10 @@
 
   const { FONTS, MOTIONS, EFFECTS, defaultSticker, drawFrame, layoutSticker } = window.Stickers;
   const { assembleAPNG, quantize, encodeIndexedPNG, createZip } = window.Encoder;
-  const { parseInstruction, parsePartRequests, parsePartMotion, WISH_EXAMPLES } = window.MotionWords;
+  const { parseInstruction, parsePartRequests, parsePartMotion, buildSpritePrompt, WISH_EXAMPLES } = window.MotionWords;
   const { removeBackgroundPixels } = window.BgRemove;
   const { guessPivot, buildMesh, findEye, PART_MOTIONS } = window.Parts;
+  const { findGrid, evenGrid, boundingBox, alignFrames, thinFrames, frameCountFor } = window.Sprite;
 
   const W = 320;
   const H = 270;
@@ -24,6 +25,9 @@
     st.custom = { ...defaultSticker().custom, ...st.custom };
     st.bg = { ...defaultSticker().bg, ...st.bg };
     st.parts = Array.isArray(st.parts) ? st.parts : [];
+    st.frameImages = Array.isArray(st.frameImages) ? st.frameImages.filter(Boolean) : [];
+    st.frameAdj = st.frameImages.map((_, i) => ({ x: 0, y: 0, s: 1, ...((st.frameAdj || [])[i] || {}) }));
+    if (st.mode === 'frames' && !st.frameImages.length) st.mode = 'single';
     // Stickers saved before background removal existed only have `image`.
     if (st.image && !st.originalImage) st.originalImage = st.image;
     st.bg.tolerance = Math.min(st.bg.tolerance, 45);
@@ -42,12 +46,95 @@
       return null;
     }
   }
+  // Pictures (data URLs) can be far bigger than localStorage allows once a sticker has
+  // many frames, so they go to IndexedDB and the saved JSON keeps an "idb:<key>" ref.
+  // Without IndexedDB (some private windows) everything stays inline as before.
+  const IDB_PREFIX = 'idb:';
+  const imageDb = new Promise((resolve) => {
+    try {
+      const req = indexedDB.open('ugoku-stamp-maker', 1);
+      req.onupgradeneeded = () => req.result.createObjectStore('images');
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => resolve(null);
+    } catch (e) {
+      resolve(null);
+    }
+  });
+  const idb = (db, mode, fn) => new Promise((resolve, reject) => {
+    const tx = db.transaction('images', mode);
+    const out = fn(tx.objectStore('images'));
+    tx.oncomplete = () => resolve(out && out.result);
+    tx.onerror = () => reject(tx.error);
+  });
+  function hashKey(str) {
+    let h = 2166136261;
+    for (let i = 0; i < str.length; i++) h = Math.imul(h ^ str.charCodeAt(i), 16777619);
+    return 'k' + (h >>> 0).toString(36) + str.length.toString(36);
+  }
+  const storedKeys = new Set();
+
+  // Swap stored refs in a loaded state back to the pictures themselves.
+  async function resolveImages(s) {
+    const db = await imageDb;
+    if (!db) return;
+    const refs = new Set();
+    JSON.stringify(s, (k, v) => (typeof v === 'string' && v.startsWith(IDB_PREFIX) ? (refs.add(v.slice(IDB_PREFIX.length)), v) : v));
+    const found = new Map();
+    await idb(db, 'readonly', (store) => {
+      for (const key of refs) {
+        const r = store.get(key);
+        r.onsuccess = () => {
+          if (r.result) {
+            found.set(key, r.result);
+            storedKeys.add(key);
+          }
+        };
+      }
+    });
+    const walk = (o) => {
+      for (const k of Object.keys(o)) {
+        const v = o[k];
+        if (typeof v === 'string' && v.startsWith(IDB_PREFIX)) o[k] = found.get(v.slice(IDB_PREFIX.length)) || null;
+        else if (v && typeof v === 'object') walk(v);
+      }
+    };
+    walk(s);
+  }
+
   let saveTimer = 0;
   function save() {
     clearTimeout(saveTimer);
-    saveTimer = setTimeout(() => {
+    saveTimer = setTimeout(async () => {
+      const db = await imageDb;
+      const fresh = new Map();
+      const used = new Set();
+      const json = JSON.stringify(state, (k, v) => {
+        if (!db || typeof v !== 'string') return v;
+        if (v.startsWith(IDB_PREFIX)) {
+          used.add(v.slice(IDB_PREFIX.length));
+          return v;
+        }
+        if (!v.startsWith('data:') || v.length < 4096) return v;
+        const key = hashKey(v);
+        used.add(key);
+        if (!storedKeys.has(key)) fresh.set(key, v);
+        return IDB_PREFIX + key;
+      });
       try {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+        if (db && fresh.size) {
+          await idb(db, 'readwrite', (store) => fresh.forEach((v, key) => store.put(v, key)));
+          fresh.forEach((_, key) => storedKeys.add(key));
+        }
+        localStorage.setItem(STORAGE_KEY, json);
+        if (db) {
+          // Forget pictures no sticker uses any more.
+          const all = await idb(db, 'readonly', (store) => store.getAllKeys());
+          const gone = (all || []).filter((key) => !used.has(key));
+          if (gone.length) {
+            await idb(db, 'readwrite', (store) => gone.forEach((key) => store.delete(key)));
+            gone.forEach((key) => storedKeys.delete(key));
+          }
+        }
       } catch (e) {
         setStatus('ブラウザの保存容量がいっぱいです（画像が大きすぎる可能性があります）', true);
       }
@@ -56,7 +143,7 @@
 
   // ---------- images ----------
   function getImage(src) {
-    if (!src) return null;
+    if (!src || !src.startsWith('data:')) return null;
     let entry = imageCache.get(src);
     if (!entry) {
       const img = new Image();
@@ -66,6 +153,7 @@
         renderList();
         if (src === current().originalImage) drawBgPickCanvas(src);
         if (src === current().image) drawPartsCanvas();
+        if (isFrames(current())) drawFrameEditor();
       };
       img.src = src;
       imageCache.set(src, entry);
@@ -433,8 +521,9 @@
     const m = parsePartMotion(text);
     if (!m) {
       $('partResult').textContent = text.trim()
-        ? 'わかる言葉が見つかりませんでした'
+        ? 'わかる言葉が見つかりませんでした。'
         : '動かしたい部分と動きを書いてね';
+      if (text.trim()) offerAi($('partResult'), text.trim());
       return;
     }
     const st = current();
@@ -452,6 +541,455 @@
   }
 
 
+  // ---------- frame art: sprite sheets, frame images, videos ----------
+  // Everything is processed in the browser; nothing is uploaded anywhere.
+  const MAX_FRAME_SIDE = 480; // frames are shown at most ~300px wide in a sticker
+  let frameSession = null; // what the current frames were made from, to redo them with other options
+  let frameSel = 0;
+
+  function toCanvas(src, maxSide) {
+    const sw = src.naturalWidth || src.videoWidth || src.displayWidth || src.width;
+    const sh = src.naturalHeight || src.videoHeight || src.displayHeight || src.height;
+    const k = Math.min(1, maxSide / Math.max(sw, sh));
+    const c = document.createElement('canvas');
+    c.width = Math.max(1, Math.round(sw * k));
+    c.height = Math.max(1, Math.round(sh * k));
+    c.getContext('2d', { willReadFrequently: true }).drawImage(src, 0, 0, c.width, c.height);
+    return c;
+  }
+
+  function pixelsOf(c) {
+    return c.getContext('2d', { willReadFrequently: true }).getImageData(0, 0, c.width, c.height);
+  }
+
+  // Remove a flat background (white paper, a single color) if the picture has one.
+  function clearBackground(c, on) {
+    if (!on) return c;
+    const id = pixelsOf(c);
+    const res = removeBackgroundPixels(id.data, c.width, c.height, { tolerance: 25 });
+    if (!res.alreadyTransparent) c.getContext('2d').putImageData(id, 0, 0);
+    return c;
+  }
+
+  function loadImageFile(file) {
+    return new Promise((resolve, reject) => {
+      const url = URL.createObjectURL(file);
+      const img = new Image();
+      img.onload = () => {
+        URL.revokeObjectURL(url);
+        resolve(img);
+      };
+      img.onerror = () => {
+        URL.revokeObjectURL(url);
+        reject(new Error('画像を読み込めませんでした'));
+      };
+      img.src = url;
+    });
+  }
+
+  // All frames of an animated GIF / APNG / WebP, where the browser can decode them.
+  async function decodeAnimated(file) {
+    if (!('ImageDecoder' in window)) return null;
+    try {
+      const dec = new ImageDecoder({ data: await file.arrayBuffer(), type: file.type || 'image/png' });
+      await dec.tracks.ready;
+      const count = dec.tracks.selectedTrack ? dec.tracks.selectedTrack.frameCount : 1;
+      if (count < 2) return null;
+      const out = [];
+      for (const i of thinFrames(count, 20)) {
+        const { image } = await dec.decode({ frameIndex: i });
+        out.push(toCanvas(image, 1200));
+        image.close();
+      }
+      return out;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  function videoFrames(file, start, length, count) {
+    return new Promise((resolve, reject) => {
+      const url = URL.createObjectURL(file);
+      const v = document.createElement('video');
+      v.muted = true;
+      v.playsInline = true;
+      v.preload = 'auto';
+      v.src = url;
+      v.onerror = () => {
+        URL.revokeObjectURL(url);
+        reject(new Error('この動画は読み込めませんでした（MP4 / WebM を選んでね）'));
+      };
+      v.onloadeddata = async () => {
+        const dur = v.duration || 0;
+        const s0 = Math.max(0, Math.min(start, Math.max(0, dur - 0.1)));
+        const len = Math.max(0.2, Math.min(length, dur - s0));
+        const out = [];
+        for (let i = 0; i < count; i++) {
+          v.currentTime = s0 + (len * i) / count;
+          await new Promise((r) => v.addEventListener('seeked', r, { once: true }));
+          out.push(toCanvas(v, 800));
+        }
+        URL.revokeObjectURL(url);
+        resolve({ frames: out, duration: dur, used: len });
+      };
+    });
+  }
+
+  /**
+   * Turn source pictures (cut from a sheet, or one per frame) into same-sized sticker
+   * frames: put each on a common canvas, steady the jitter, trim the empty border
+   * shared by all frames, and shrink to a sensible size.
+   */
+  function makeFrames(pieces, alignMode) {
+    const fw = Math.max(...pieces.map((p) => p.width));
+    const fh = Math.max(...pieces.map((p) => p.height));
+    const placed = pieces.map((p) => {
+      const c = document.createElement('canvas');
+      c.width = fw;
+      c.height = fh;
+      c.getContext('2d').drawImage(p, Math.round((fw - p.width) / 2), Math.round((fh - p.height) / 2));
+      return c;
+    });
+    const raw = placed.map((c) => ({ d: pixelsOf(c).data, w: fw, h: fh }));
+    const shifts = alignFrames(raw, alignMode);
+    const shifted = placed.map((c, i) => {
+      const o = document.createElement('canvas');
+      o.width = fw;
+      o.height = fh;
+      o.getContext('2d').drawImage(c, shifts[i][0], shifts[i][1]);
+      return o;
+    });
+    let box = null;
+    for (const c of shifted) {
+      const b = boundingBox(pixelsOf(c).data, fw, fh);
+      if (!b) continue;
+      box = box
+        ? { x: Math.min(box.x, b.x), y: Math.min(box.y, b.y), r: Math.max(box.r, b.x + b.w), b: Math.max(box.b, b.y + b.h) }
+        : { x: b.x, y: b.y, r: b.x + b.w, b: b.y + b.h };
+    }
+    if (!box) throw new Error('絵が見つかりませんでした');
+    const pad = 2;
+    const bx = Math.max(0, box.x - pad);
+    const by = Math.max(0, box.y - pad);
+    const bw = Math.min(fw, box.r + pad) - bx;
+    const bh = Math.min(fh, box.b + pad) - by;
+    const k = Math.min(1, MAX_FRAME_SIDE / Math.max(bw, bh));
+    return shifted.map((c) => {
+      const o = document.createElement('canvas');
+      o.width = Math.max(1, Math.round(bw * k));
+      o.height = Math.max(1, Math.round(bh * k));
+      o.getContext('2d').drawImage(c, bx, by, bw, bh, 0, 0, o.width, o.height);
+      return o.toDataURL('image/png');
+    });
+  }
+
+  function cutCells(sheet, cells) {
+    return cells.map((r) => {
+      const c = document.createElement('canvas');
+      c.width = r.w;
+      c.height = r.h;
+      c.getContext('2d').drawImage(sheet, r.x, r.y, r.w, r.h, 0, 0, r.w, r.h);
+      return c;
+    });
+  }
+
+  // (Re)build the current sticker's frames from the session's source and options.
+  async function rebuildFrames() {
+    const f = frameSession;
+    if (!f) return;
+    setStatus('コマを作っています…');
+    await new Promise((r) => setTimeout(r, 20)); // let the message show before the heavy work
+    try {
+      let pieces;
+      if (f.kind === 'sheet') {
+        const sheet = clearBackground(toCanvas(f.source, 2000), f.bg);
+        let grid = null;
+        if (f.grid === 'auto') grid = findGrid(pixelsOf(sheet).data, sheet.width, sheet.height);
+        f.found = grid ? `${grid.cols}×${grid.rows}` : null;
+        if (!grid) {
+          const [c, r] = f.grid === 'auto' ? [2, 2] : f.grid.split('x').map(Number);
+          grid = evenGrid(sheet.width, sheet.height, c, r);
+        }
+        pieces = cutCells(sheet, grid.cells);
+      } else if (f.kind === 'video') {
+        const count = Math.max(5, Math.min(20, Math.round(f.length * 8)));
+        const res = await videoFrames(f.source, f.start, f.length, count);
+        f.videoDuration = res.duration;
+        f.used = res.used;
+        pieces = res.frames.map((c) => clearBackground(c, f.bg));
+      } else {
+        pieces = f.source.map((c) => clearBackground(toCanvas(c, 1200), f.bg));
+      }
+      pieces = thinFrames(pieces.length, 20).map((i) => pieces[i]);
+      const urls = makeFrames(pieces, f.align);
+      const st = current();
+      st.mode = 'frames';
+      st.frameImages = urls;
+      st.frameAdj = urls.map(() => ({ x: 0, y: 0, s: 1 }));
+      st.frames = frameCountFor(urls.length);
+      if (f.kind === 'video') st.duration = Math.max(1, Math.min(4, Math.round(f.used)));
+      st.loops = Math.min(st.loops, Math.max(1, Math.floor(4 / st.duration)));
+      frameSel = 0;
+      changed();
+      let how = '';
+      if (f.kind === 'sheet' && f.grid !== 'auto') how = `（${f.grid.replace('x', '×')}で切りました）`;
+      else if (f.kind === 'sheet') how = f.found ? `（${f.found}の並びを自動で見つけました）` : '（並びが見つからなかったので2×2で切りました。下の「コマの並び」で変えられます）';
+      setStatus(`${urls.length}コマのスタンプにしました${how}`);
+    } catch (err) {
+      setStatus('コマを作れませんでした：' + err.message, true);
+    }
+  }
+
+  // A new source replaces the sticker's picture: frame art and the one-picture mode
+  // don't mix, and words drawn inside the frames usually replace the typed text.
+  async function startFrames(kind, source, extra = {}) {
+    const st = current();
+    const first = !isFrames(st);
+    frameSession = { kind, source, grid: 'auto', align: kind === 'video' ? 'none' : 'auto', bg: true, start: 0, length: 2, ...extra };
+    if (first) {
+      st.text = '';
+      st.motion = 'none';
+    }
+    st.parts = [];
+    await rebuildFrames();
+  }
+
+  function selectedAdj() {
+    const st = current();
+    return st.frameAdj[Math.min(frameSel, st.frameAdj.length - 1)];
+  }
+
+  function drawFrameEditor() {
+    const st = current();
+    const canvas = $('frameEdit');
+    if (!isFrames(st)) return;
+    const cur = getImage(st.frameImages[frameSel]);
+    const prev = getImage(st.frameImages[(frameSel - 1 + st.frameImages.length) % st.frameImages.length]);
+    if (!cur) return;
+    const w = 280;
+    const h = Math.round((cur.height / cur.width) * w);
+    canvas.width = w;
+    canvas.height = h;
+    const ctx = canvas.getContext('2d');
+    ctx.clearRect(0, 0, w, h);
+    const put = (img, a, alpha) => {
+      const s = a.s || 1;
+      ctx.globalAlpha = alpha;
+      ctx.drawImage(img, (a.x || 0) * w - ((s - 1) * w) / 2, (a.y || 0) * h - ((s - 1) * h) / 2, w * s, h * s);
+    };
+    // The previous frame shows faintly underneath ("onion skin") to line them up.
+    if (prev && st.frameImages.length > 1) put(prev, st.frameAdj[(frameSel - 1 + st.frameImages.length) % st.frameImages.length], 0.3);
+    put(cur, st.frameAdj[frameSel], 1);
+    ctx.globalAlpha = 1;
+  }
+
+  function syncFrames() {
+    const st = current();
+    const frames = isFrames(st);
+    const mode = frames ? 'frames' : st.uiMode || 'single';
+    $('modeChips').querySelectorAll('.chip').forEach((c) => c.setAttribute('aria-checked', String(c.dataset.value === mode)));
+    $('singleMode').hidden = mode !== 'single';
+    $('framesMode').hidden = mode !== 'frames';
+    $('frameTools').hidden = !frames;
+    $('partsPanel').hidden = frames;
+    $('partsFramesNote').hidden = !frames;
+    $('frames').disabled = frames;
+    $('framesNote').hidden = !frames;
+    if (!frames) return;
+    frameSel = Math.min(frameSel, st.frameImages.length - 1);
+    const f = frameSession;
+    $('frameInfo').textContent = `${st.frameImages.length}コマ` + (f ? '' : '（並び・揺れ補正・背景を変えるには、もう一度読み込んでね）');
+    $('gridRow').hidden = !f || f.kind !== 'sheet';
+    $('videoRow').hidden = !f || f.kind !== 'video';
+    $('reprocessRow').hidden = !f;
+    if (f) {
+      $('gridChips').querySelectorAll('.chip').forEach((c) => c.setAttribute('aria-checked', String(c.dataset.value === f.grid)));
+      $('alignChips').querySelectorAll('.chip').forEach((c) => c.setAttribute('aria-checked', String(c.dataset.value === f.align)));
+      $('frameBg').checked = f.bg;
+      if (f.kind === 'video') {
+        $('videoStart').max = Math.max(0, (f.videoDuration || 4) - 0.5).toFixed(1);
+        $('videoStart').value = f.start;
+        $('videoLength').value = String(f.length);
+        $('videoStartOut').textContent = `${Number(f.start).toFixed(1)}秒から`;
+      }
+    }
+    const strip = $('frameStrip');
+    strip.innerHTML = '';
+    st.frameImages.forEach((url, i) => {
+      if (!url.startsWith('data:')) return; // still loading from storage
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'frame-thumb';
+      b.setAttribute('aria-label', `${i + 1}コマ目`);
+      b.setAttribute('aria-current', String(i === frameSel));
+      const img = document.createElement('img');
+      img.src = url;
+      img.alt = '';
+      const n = document.createElement('span');
+      n.textContent = i + 1;
+      b.append(img, n);
+      b.addEventListener('click', () => {
+        frameSel = i;
+        syncFrames();
+      });
+      strip.append(b);
+    });
+    drawFrameEditor();
+  }
+
+  function wireFrames() {
+    buildChips($('modeChips'), { single: { label: '1枚の絵を動かす' }, frames: { label: 'コマ絵・動画から作る' } }, (id) => {
+      const st = current();
+      if (id === 'single' && isFrames(st)) {
+        st.mode = 'single';
+        st.frameImages = [];
+        st.frameAdj = [];
+        frameSession = null;
+      }
+      st.uiMode = id;
+      changed();
+    });
+    const updatePrompt = () => {
+      $('aiPrompt').value = buildSpritePrompt({
+        action: $('aiAction').value,
+        character: $('aiCharacter').value.trim(),
+        text: $('aiText').value,
+        frames: Number($('aiFrames').value),
+        withImage: $('aiWithImage').checked,
+      });
+    };
+    for (const id of ['aiAction', 'aiCharacter', 'aiText', 'aiFrames', 'aiWithImage']) $(id).addEventListener('input', updatePrompt);
+    $('aiWithImage').addEventListener('change', updatePrompt);
+    updatePrompt();
+    $('aiCopy').addEventListener('click', async () => {
+      updatePrompt();
+      try {
+        await navigator.clipboard.writeText($('aiPrompt').value);
+        $('aiCopy').textContent = 'コピーしました';
+      } catch (e) {
+        $('aiPrompt').select();
+        $('aiCopy').textContent = '選択しました。コピーしてね';
+      }
+      setTimeout(() => ($('aiCopy').textContent = '頼み方をコピー'), 2000);
+    });
+
+    $('sheetFile').addEventListener('change', async (e) => {
+      const file = e.target.files[0];
+      e.target.value = '';
+      if (!file) return;
+      try {
+        await startFrames('sheet', await loadImageFile(file));
+      } catch (err) {
+        setStatus(err.message, true);
+      }
+    });
+    $('framesFile').addEventListener('change', async (e) => {
+      const files = [...e.target.files];
+      e.target.value = '';
+      if (!files.length) return;
+      try {
+        let pics = [];
+        for (const f of files) {
+          const anim = /gif|png|webp/.test(f.type) ? await decodeAnimated(f) : null;
+          if (anim) pics = pics.concat(anim);
+          else pics.push(await loadImageFile(f));
+        }
+        if (pics.length < 2) {
+          setStatus(files.length === 1 && /gif|png/.test(files[0].type) && !('ImageDecoder' in window)
+            ? 'この端末ではGIF・APNGのコマを取り出せません。PNGのコマを複数選んでね'
+            : 'コマの画像を2枚以上選んでね（1枚にコマが並んでいる絵は「スプライトシート」から）', true);
+          return;
+        }
+        await startFrames('images', pics);
+      } catch (err) {
+        setStatus(err.message, true);
+      }
+    });
+    $('videoFile').addEventListener('change', async (e) => {
+      const file = e.target.files[0];
+      e.target.value = '';
+      if (!file) return;
+      await startFrames('video', file);
+    });
+
+    buildChips($('gridChips'), { auto: { label: '自動' }, '2x2': { label: '2×2' }, '3x2': { label: '3×2' }, '4x2': { label: '4×2' }, '3x3': { label: '3×3' }, '4x3': { label: '4×3' }, '4x4': { label: '4×4' }, '2x1': { label: '2×1' }, '3x1': { label: '3×1' }, '4x1': { label: '4×1' } }, (id) => {
+      frameSession.grid = id;
+      rebuildFrames();
+    });
+    buildChips($('alignChips'), { auto: { label: '自動で揺れを減らす' }, bottom: { label: '足元をそろえる' }, center: { label: '中心をそろえる' }, none: { label: 'そのまま' } }, (id) => {
+      frameSession.align = id;
+      rebuildFrames();
+    });
+    $('frameBg').addEventListener('change', () => {
+      frameSession.bg = $('frameBg').checked;
+      rebuildFrames();
+    });
+    $('videoStart').addEventListener('input', () => {
+      $('videoStartOut').textContent = `${Number($('videoStart').value).toFixed(1)}秒から`;
+    });
+    $('videoStart').addEventListener('change', () => {
+      frameSession.start = Number($('videoStart').value);
+      rebuildFrames();
+    });
+    $('videoLength').addEventListener('change', () => {
+      frameSession.length = Number($('videoLength').value);
+      rebuildFrames();
+    });
+
+    const nudge = (dx, dy, ds) => () => {
+      const a = selectedAdj();
+      a.x = Math.round((a.x + dx) * 1000) / 1000;
+      a.y = Math.round((a.y + dy) * 1000) / 1000;
+      a.s = Math.max(0.5, Math.min(1.5, Math.round((a.s + ds) * 100) / 100));
+      changed();
+    };
+    $('frameLeft').addEventListener('click', nudge(-0.01, 0, 0));
+    $('frameRight').addEventListener('click', nudge(0.01, 0, 0));
+    $('frameUp').addEventListener('click', nudge(0, -0.01, 0));
+    $('frameDown').addEventListener('click', nudge(0, 0.01, 0));
+    $('frameBigger').addEventListener('click', nudge(0, 0, 0.02));
+    $('frameSmaller').addEventListener('click', nudge(0, 0, -0.02));
+    const move = (dir) => () => {
+      const st = current();
+      const j = frameSel + dir;
+      if (j < 0 || j >= st.frameImages.length) return;
+      for (const arr of [st.frameImages, st.frameAdj]) [arr[frameSel], arr[j]] = [arr[j], arr[frameSel]];
+      frameSel = j;
+      changed();
+    };
+    $('frameEarlier').addEventListener('click', move(-1));
+    $('frameLater').addEventListener('click', move(1));
+    $('frameDelete').addEventListener('click', () => {
+      const st = current();
+      if (st.frameImages.length <= 2) {
+        setStatus('コマは2枚以上必要です', true);
+        return;
+      }
+      st.frameImages.splice(frameSel, 1);
+      st.frameAdj.splice(frameSel, 1);
+      st.frames = frameCountFor(st.frameImages.length);
+      frameSel = Math.max(0, frameSel - 1);
+      changed();
+    });
+  }
+
+  // Words the app can't turn into a motion: offer to have an image AI draw it as frames.
+  function offerAi(resultEl, words) {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'btn small ai-offer';
+    b.textContent = 'この動きをAIにコマ絵で描いてもらう';
+    b.addEventListener('click', () => {
+      current().uiMode = 'frames';
+      $('aiAction').value = words;
+      $('aiAction').dispatchEvent(new Event('input'));
+      showTab('image');
+      changed();
+      $('aiBox').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+    resultEl.append(' ', b);
+  }
+
   // ---------- rendering ----------
   function stillT(st) {
     if (st.motion === 'typing') return 0.85;
@@ -459,9 +997,20 @@
     return 0.5;
   }
 
+  const isFrames = (st) => st.mode === 'frames' && st.frameImages.length > 0;
+  // Which drawn frame shows at time t: the frames share the loop equally.
+  const frameIndex = (st, t) => Math.min(st.frameImages.length - 1, Math.floor(t * st.frameImages.length + 1e-9));
+  // The picture that decides the sticker's layout (all frames are the same size).
+  const layoutImage = (st) => getImage(isFrames(st) ? st.frameImages[0] : st.image);
+
   function renderSticker(canvas, st, t, w = W, h = H) {
     const ctx = canvas.getContext('2d');
     ctx.setTransform(canvas.width / w, 0, 0, canvas.height / h, 0, 0);
+    if (isFrames(st)) {
+      const i = frameIndex(st, t);
+      drawFrame(ctx, st, t, w, h, getImage(st.frameImages[i]) || layoutImage(st), { adjust: st.frameAdj[i] || {} });
+      return;
+    }
     drawFrame(ctx, st, t, w, h, getImage(st.image), getLayers(st));
   }
 
@@ -556,8 +1105,9 @@
       }
       if (!understood.length) {
         $('wishResult').textContent = $('wishText').value.trim()
-          ? 'わかる言葉が見つかりませんでした'
+          ? 'わかる言葉が見つかりませんでした。'
           : '作りたいスタンプを書いてね';
+        if ($('wishText').value.trim()) offerAi($('wishResult'), $('wishText').value.trim());
         return;
       }
       const st = current();
@@ -566,7 +1116,12 @@
       Object.assign(st, fields);
       if (custom) Object.assign(st.custom, custom, { text: '' });
       st.loops = Math.min(st.loops, Math.max(1, Math.floor(4 / st.duration)));
-      $('wishResult').textContent = '設定しました：' + understood.join(' / ');
+      $('wishResult').textContent = '設定しました：' + understood.join(' / ') + '。';
+      if (custom) {
+        // Keyword reading can't know every way of saying a motion.
+        $('wishResult').append('思った動きと違うときは');
+        offerAi($('wishResult'), $('wishText').value.replace(/[「『][^」』]*[」』]/g, '').trim());
+      }
       changed(!!fields.font);
     };
     $('wishApply').addEventListener('click', applyWish);
@@ -735,6 +1290,7 @@
       downAt = null;
     });
 
+    wireFrames();
     document.querySelectorAll('.tabs [role="tab"]').forEach((b) => b.addEventListener('click', () => showTab(b.dataset.tab)));
     let savedTab = 'text';
     try {
@@ -759,7 +1315,7 @@
       const st = current();
       const ctx = pv.getContext('2d');
       ctx.save();
-      const lay = layoutSticker(ctx, st, W, H, getImage(st.image));
+      const lay = layoutSticker(ctx, st, W, H, layoutImage(st));
       ctx.restore();
       const pad = 8;
       const b = lay.textBox;
@@ -938,6 +1494,7 @@
       drawBgPickCanvas(st.originalImage);
     }
     syncParts();
+    syncFrames();
   }
 
   let sizeToken = 0;
@@ -960,6 +1517,8 @@
 
   function select(i) {
     state.selected = i;
+    frameSession = null;
+    frameSel = 0;
     partSel = 0;
     partMode = 'idle';
     pendingParts = [];
@@ -1118,6 +1677,10 @@
   // ---------- boot ----------
   buildEditor();
   syncEditor();
+  resolveImages(state).then(() => {
+    state.stickers = state.stickers.map((x) => newSticker(x));
+    changed();
+  });
   renderList();
   requestAnimationFrame(tick);
   Promise.all(FONTS.map((f) => ensureFont(f.id))).then(() => updateSize(current()));

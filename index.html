@@ -92,6 +92,10 @@
       </div>
 
       <div class="tab-page" id="page-image" role="tabpanel" aria-labelledby="tab-image" hidden>
+      <h2>作り方</h2>
+      <div id="modeChips" class="chips" role="radiogroup" aria-label="作り方"></div>
+
+      <div id="singleMode">
       <h2>イラスト・写真 <small>（任意）</small></h2>
       <div class="image-row">
         <label class="btn small ghost file">画像を選ぶ<input id="image" type="file" accept="image/*"></label>
@@ -110,6 +114,65 @@
           <button id="bgAuto" type="button" class="btn small ghost">最初の自動の状態に戻す</button>
         </div>
       </div>
+      </div>
+
+      <div id="framesMode" hidden>
+        <div id="aiBox" class="ai-box">
+          <h2>AIにコマ絵を描いてもらう</h2>
+          <p class="hint">ChatGPTやGeminiに貼る「頼み方」を作ります。キャラの画像も一緒に渡すと、同じキャラで描いてくれます。</p>
+          <label>どんな動き？<input id="aiAction" type="text" placeholder="例：右目でウインクする／歩く／手を振る"></label>
+          <div class="grid2">
+            <label>キャラの説明（任意）<input id="aiCharacter" type="text" placeholder="例：白黒のパンダ"></label>
+            <label>絵に入れる文字（任意）<input id="aiText" type="text" placeholder="例：ありがとう"></label>
+            <label>コマ数<select id="aiFrames"><option value="4">4コマ</option><option value="6">6コマ</option><option value="8" selected>8コマ</option><option value="9">9コマ</option><option value="12">12コマ</option><option value="16">16コマ</option></select></label>
+            <label class="check"><input id="aiWithImage" type="checkbox" checked> キャラの画像を添付する</label>
+          </div>
+          <textarea id="aiPrompt" rows="7" readonly aria-label="AIへの頼み方"></textarea>
+          <button id="aiCopy" type="button" class="btn small">頼み方をコピー</button>
+          <p class="hint">AIが描いた画像を保存して、下の「スプライトシートを選ぶ」で入れてね。</p>
+        </div>
+
+        <h2>コマ絵・動画を入れる</h2>
+        <div class="import-buttons">
+          <label class="btn small file">スプライトシートを選ぶ<input id="sheetFile" type="file" accept="image/*"></label>
+          <label class="btn small ghost file">コマの画像を選ぶ（複数・GIF・APNG）<input id="framesFile" type="file" accept="image/png,image/gif,image/webp,image/jpeg,image/apng" multiple></label>
+          <label class="btn small ghost file">動画を選ぶ（MP4・WebM）<input id="videoFile" type="file" accept="video/mp4,video/webm,video/*"></label>
+        </div>
+        <p class="hint">スプライトシート＝1枚の絵にコマが並んだもの。コマの並びは自動で見つけて切り分けます。</p>
+
+        <div id="frameTools" hidden>
+          <p id="frameInfo" class="hint strong"></p>
+          <div id="gridRow">
+            <p class="hint">コマの並び</p>
+            <div id="gridChips" class="chips" role="radiogroup" aria-label="コマの並び"></div>
+          </div>
+          <div id="videoRow" class="grid2">
+            <label>使う場所 <output id="videoStartOut"></output><input id="videoStart" type="range" min="0" max="10" step="0.1" value="0"></label>
+            <label>長さ<select id="videoLength"><option value="1">1秒</option><option value="2">2秒</option><option value="3">3秒</option><option value="4">4秒</option></select></label>
+          </div>
+          <div id="reprocessRow">
+            <p class="hint">揺れの補正</p>
+            <div id="alignChips" class="chips" role="radiogroup" aria-label="揺れの補正"></div>
+            <label class="check"><input id="frameBg" type="checkbox" checked> 白や単色の背景を消す</label>
+          </div>
+
+          <p class="hint">コマ（タップで選ぶ）</p>
+          <div id="frameStrip" class="frame-strip"></div>
+          <canvas id="frameEdit" aria-label="選んだコマ（うすく見えるのは1つ前のコマ）"></canvas>
+          <p class="hint">うすく見えるのは1つ前のコマ。ずれていたら、選んだコマを動かしてそろえます。</p>
+          <div class="frame-buttons">
+            <button id="frameLeft" type="button" class="btn small ghost" aria-label="左へ">←</button>
+            <button id="frameUp" type="button" class="btn small ghost" aria-label="上へ">↑</button>
+            <button id="frameDown" type="button" class="btn small ghost" aria-label="下へ">↓</button>
+            <button id="frameRight" type="button" class="btn small ghost" aria-label="右へ">→</button>
+            <button id="frameBigger" type="button" class="btn small ghost">大きく</button>
+            <button id="frameSmaller" type="button" class="btn small ghost">小さく</button>
+            <button id="frameEarlier" type="button" class="btn small ghost">前へ</button>
+            <button id="frameLater" type="button" class="btn small ghost">後ろへ</button>
+            <button id="frameDelete" type="button" class="btn small ghost danger">このコマを消す</button>
+          </div>
+        </div>
+      </div>
 
       </div>
 
@@ -117,6 +180,7 @@
       <h2>体全体の動き</h2>
       <div id="motions" class="chips" role="radiogroup" aria-label="体全体の動き"></div>
 
+      <p id="partsFramesNote" class="hint" hidden>コマ絵・動画から作ったスタンプは、コマの絵そのものが動きます（一部分の動きは「1枚の絵を動かす」で使えます）。</p>
       <div id="partsPanel" class="parts-panel">
         <h2>一部分の動き <small>（手・耳など）</small></h2>
         <p id="partsHint" class="hint"></p>
@@ -152,6 +216,7 @@
       <h2>タイミング</h2>
       <div class="grid2">
         <label>コマ数 <output id="framesOut"></output><input id="frames" type="range" min="5" max="20" step="1"></label>
+        <p id="framesNote" class="hint" hidden>コマ数は、コマ絵の枚数で決まります。</p>
         <label>1ループの長さ<select id="duration"><option value="1">1秒</option><option value="2">2秒</option><option value="3">3秒</option><option value="4">4秒</option></select></label>
         <label>ループ回数<select id="loops"></select></label>
       </div>
@@ -169,6 +234,7 @@
   <script src="js/motion-words.js"></script>
   <script src="js/bg-remove.js"></script>
   <script src="js/parts.js"></script>
+  <script src="js/sprite.js"></script>
   <script src="js/app.js"></script>
 </body>
 </html>
