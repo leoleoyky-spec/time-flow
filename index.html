@@ -71,18 +71,28 @@
       <label>画像の大きさ<input id="imageScale" type="range" min="0.3" max="1" step="0.05"></label>
 
       <div id="bgPanel" class="bg-panel" hidden>
-        <label class="switch-row"><input id="bgToggle" type="checkbox"> 背景を透明にする</label>
+        <p id="bgHint" class="bg-hint">この画像には背景があります。ボタンを押すと背景を消して、キャラクターだけにできます。</p>
+        <button id="bgToggle" type="button" class="btn bg-toggle" aria-pressed="false">背景を透明にする</button>
         <div id="bgControls" class="bg-controls" hidden>
-          <label>感度<input id="bgTolerance" type="range" min="5" max="70" step="1"></label>
-          <canvas id="bgPickCanvas" aria-label="背景の色をクリックして選ぶ"></canvas>
-          <p class="hint">画像の背景部分をクリックすると、その色をねらって透明にします</p>
-          <button id="bgAuto" type="button" class="btn small ghost">四隅の色から自動で検出</button>
+          <p class="hint">まだ背景が残っているときは、下の小さい画像で<strong>残っている背景の部分をタップ</strong>してください。</p>
+          <canvas id="bgPickCanvas" aria-label="残っている背景の部分をタップ"></canvas>
+          <label>消す強さ<input id="bgTolerance" type="range" min="5" max="70" step="1"></label>
+          <p class="hint">キャラクターまで消えてしまうときは「消す強さ」を左へ、背景が残るときは右へ動かします。</p>
+          <button id="bgAuto" type="button" class="btn small ghost">最初の自動の状態に戻す</button>
         </div>
       </div>
 
       <h2>うごき</h2>
       <div id="motions" class="chips" role="radiogroup" aria-label="うごき"></div>
       <div id="customPanel" class="custom-panel" hidden>
+        <label for="customText" class="words-label">どんな動きにしたい？ 日本語で書いてね</label>
+        <div class="words-row">
+          <input id="customText" type="text" placeholder="例：大きく2回跳ねる" enterkeyhint="done">
+          <button id="customApply" type="button" class="btn small">動かす</button>
+        </div>
+        <p id="customResult" class="hint" role="status"></p>
+        <div id="customExamples" class="chips examples" aria-label="例"></div>
+        <p class="hint fine-tune">細かい調整（言葉で動かしたあとにさわってもOK）</p>
         <p class="hint">リズム</p>
         <div id="customWave" class="chips" role="radiogroup" aria-label="リズム"></div>
         <div class="grid2">
@@ -114,6 +124,7 @@
 
   <script src="js/encoder.js"></script>
   <script src="js/animations.js"></script>
+  <script src="js/motion-words.js"></script>
   <script src="js/app.js"></script>
 </body>
 </html>

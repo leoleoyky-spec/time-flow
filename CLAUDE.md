@@ -15,8 +15,9 @@ time-flow/
 ├── css/style.css        # Styles (light/dark, responsive)
 ├── js/encoder.js        # APNG assembly, palette quantizer, indexed PNG, ZIP (browser + Node)
 ├── js/animations.js     # Sticker drawing: motions, effects, text layout
+├── js/motion-words.js   # Japanese text → custom-motion slider values (browser + Node)
 ├── js/app.js            # UI state, preview, export, localStorage persistence
-├── test/                # node:test unit tests for js/encoder.js
+├── test/                # node:test unit tests for js/encoder.js and js/motion-words.js
 └── package.json         # npm scripts (no dependencies)
 ```
 
@@ -30,7 +31,9 @@ Two features worth knowing about when touching `js/app.js` or `js/animations.js`
   toggling or re-tuning removal never re-compresses the source.
 - **Custom motion**: the `custom` entry in `MOTIONS` (`js/animations.js`) reads per-sticker sliders
   from `sticker.custom` (wave shape, speed, move X/Y, rotate, zoom) instead of a fixed formula, for
-  when the built-in motion presets aren't specific enough.
+  when the built-in motion presets aren't specific enough. Users can also type the motion in
+  Japanese ("大きく2回跳ねる"); `parseMotionText()` in `js/motion-words.js` maps keywords to those
+  slider values. It is deliberately keyword-based (no AI call) so the app stays free and offline.
 
 ## Development Workflow
 

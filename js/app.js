@@ -3,6 +3,7 @@
 
   const { FONTS, MOTIONS, EFFECTS, CUSTOM_WAVES, defaultSticker, drawFrame } = window.Stickers;
   const { assembleAPNG, quantize, encodeIndexedPNG, createZip } = window.Encoder;
+  const { parseMotionText, EXAMPLES: MOTION_EXAMPLES } = window.MotionWords;
 
   const W = 320;
   const H = 270;
@@ -101,6 +102,18 @@
     };
     const corners = [at(0, 0), at(w - 1, 0), at(0, h - 1), at(w - 1, h - 1)];
     return corners.reduce((sum, c) => sum.map((v, i) => v + c[i] / 4), [0, 0, 0]);
+  }
+
+  // An already-transparent PNG has see-through corners; a photo or drawing on paper doesn't.
+  async function hasOpaqueCorners(dataUrl) {
+    const img = await loadImageEl(dataUrl);
+    const c = document.createElement('canvas');
+    c.width = img.width;
+    c.height = img.height;
+    const ctx = c.getContext('2d', { willReadFrequently: true });
+    ctx.drawImage(img, 0, 0);
+    const corners = [[0, 0], [img.width - 1, 0], [0, img.height - 1], [img.width - 1, img.height - 1]];
+    return corners.some(([x, y]) => ctx.getImageData(x, y, 1, 1).data[3] > 200);
   }
 
   // Soften the hard cutout edge left by the flood fill by lightly blurring alpha only.
@@ -278,6 +291,37 @@
       });
     }
 
+    const applyWords = () => {
+      const text = $('customText').value;
+      const st = current();
+      st.custom.text = text;
+      const r = parseMotionText(text);
+      if (!r) {
+        $('customResult').textContent = text.trim()
+          ? 'ごめんね、動きの言葉が見つからなかったよ。下の例を参考にしてね'
+          : '動きを言葉で書いてね';
+        return;
+      }
+      Object.assign(st.custom, r.custom);
+      $('customResult').textContent = '読みとった動き：' + r.understood.join('・');
+      changed();
+    };
+    $('customApply').addEventListener('click', applyWords);
+    $('customText').addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && !e.isComposing) applyWords();
+    });
+    for (const ex of MOTION_EXAMPLES) {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'chip';
+      b.textContent = ex;
+      b.addEventListener('click', () => {
+        $('customText').value = ex;
+        applyWords();
+      });
+      $('customExamples').append(b);
+    }
+
     for (const [elId, prop] of Object.entries(CUSTOM_SLIDERS)) {
       $(elId).addEventListener('input', () => {
         current().custom[prop] = Number($(elId).value);
@@ -294,7 +338,7 @@
         const st = current();
         st.originalImage = dataUrl;
         st.image = dataUrl;
-        st.bg = { enabled: false, tolerance: 30, color: null };
+        st.bg = { enabled: false, tolerance: 30, color: null, hasBackground: await hasOpaqueCorners(dataUrl) };
         changed();
       } catch (err) {
         setStatus(err.message, true);
@@ -308,8 +352,8 @@
       changed();
     });
 
-    $('bgToggle').addEventListener('change', () => {
-      current().bg.enabled = $('bgToggle').checked;
+    $('bgToggle').addEventListener('click', () => {
+      current().bg.enabled = !current().bg.enabled;
       applyBackgroundRemoval();
       syncEditor();
     });
@@ -448,13 +492,16 @@
     updateSize(st);
 
     $('customPanel').hidden = st.motion !== 'custom';
+    if (document.activeElement !== $('customText')) $('customText').value = st.custom.text || '';
     for (const [elId, prop] of Object.entries(CUSTOM_SLIDERS)) {
       if ($(elId).value !== String(st.custom[prop])) $(elId).value = st.custom[prop];
     }
 
     $('bgPanel').hidden = !st.originalImage;
     if (st.originalImage) {
-      $('bgToggle').checked = st.bg.enabled;
+      $('bgToggle').setAttribute('aria-pressed', String(st.bg.enabled));
+      $('bgToggle').textContent = st.bg.enabled ? '背景を元に戻す' : '背景を透明にする';
+      $('bgHint').hidden = st.bg.enabled || st.bg.hasBackground === false;
       $('bgControls').hidden = !st.bg.enabled;
       $('bgTolerance').value = st.bg.tolerance;
       drawBgPickCanvas(st.originalImage);
@@ -481,6 +528,7 @@
 
   function select(i) {
     state.selected = i;
+    $('customResult').textContent = '';
     startTime = performance.now();
     syncEditor();
     renderList();
