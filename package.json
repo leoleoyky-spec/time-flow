@@ -1,0 +1,9 @@
+{
+  "name": "time-flow",
+  "private": true,
+  "description": "うごくスタンプメーカー — LINE animated sticker (APNG) maker that runs in the browser",
+  "scripts": {
+    "start": "python3 -m http.server 8000",
+    "test": "node --test test/*.test.js"
+  }
+}

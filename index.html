@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>うごくスタンプメーカー</title>
+  <meta name="description" content="テキストやイラストから、LINEアニメーションスタンプ（APNG）を作成できるブラウザアプリ">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Dela+Gothic+One&family=Hachi+Maru+Pop&family=Kaisei+Decol:wght@700&family=M+PLUS+Rounded+1c:wght@800&family=RocknRoll+One&family=Yusei+Magic&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <header class="topbar">
+    <h1><span class="logo" aria-hidden="true">✦</span> うごくスタンプメーカー</h1>
+    <p class="sub">LINEアニメーションスタンプ（APNG）をブラウザだけで作成</p>
+  </header>
+
+  <main class="layout">
+    <section class="panel list-panel" aria-label="スタンプ一覧">
+      <div class="panel-head">
+        <h2>スタンプ <span id="count" class="badge">0</span></h2>
+        <div class="row-buttons">
+          <button id="add" class="btn small">＋ 追加</button>
+          <button id="duplicate" class="btn small ghost">複製</button>
+          <button id="remove" class="btn small ghost danger">削除</button>
+        </div>
+      </div>
+      <ol id="list" class="sticker-list"></ol>
+      <p id="countHint" class="hint"></p>
+    </section>
+
+    <section class="panel preview-panel" aria-label="プレビュー">
+      <div class="stage">
+        <canvas id="preview" width="640" height="540" aria-label="スタンプのプレビュー"></canvas>
+      </div>
+      <div class="bg-switch" role="group" aria-label="プレビュー背景">
+        <button data-bg="checker" class="chip active">透明</button>
+        <button data-bg="line" class="chip">トーク画面</button>
+        <button data-bg="dark" class="chip">ダーク</button>
+      </div>
+      <dl class="specs">
+        <div><dt>サイズ</dt><dd>320 × 270 px</dd></div>
+        <div><dt>コマ数</dt><dd id="specFrames">-</dd></div>
+        <div><dt>再生時間</dt><dd id="specTime">-</dd></div>
+        <div><dt>ファイルサイズ</dt><dd id="specSize">未計測</dd></div>
+      </dl>
+      <div class="export">
+        <button id="exportOne" class="btn primary">このスタンプをPNG(APNG)で保存</button>
+        <button id="exportZip" class="btn primary outline">全部まとめてZIP保存（main / tab 付き）</button>
+      </div>
+      <p id="status" class="status" role="status"></p>
+    </section>
+
+    <section class="panel editor" aria-label="編集">
+      <h2>テキスト</h2>
+      <textarea id="text" rows="2" placeholder="例：ありがとう！"></textarea>
+      <div class="grid2">
+        <label>フォント<select id="font"></select></label>
+        <label>文字の大きさ<input id="fontSize" type="range" min="24" max="120" step="2"></label>
+        <label class="color">文字色<input id="color" type="color"></label>
+        <label class="color">フチ色<input id="strokeColor" type="color"></label>
+        <label>フチの太さ<input id="strokeWidth" type="range" min="0" max="16" step="1"></label>
+      </div>
+
+      <h2>イラスト・写真 <small>（任意・背景透過PNG推奨）</small></h2>
+      <div class="image-row">
+        <label class="btn small ghost file">画像を選ぶ<input id="image" type="file" accept="image/*"></label>
+        <button id="clearImage" class="btn small ghost danger">画像を外す</button>
+      </div>
+      <label>画像の大きさ<input id="imageScale" type="range" min="0.3" max="1" step="0.05"></label>
+
+      <h2>うごき</h2>
+      <div id="motions" class="chips" role="radiogroup" aria-label="うごき"></div>
+
+      <h2>エフェクト</h2>
+      <div id="effects" class="chips" role="radiogroup" aria-label="エフェクト"></div>
+      <label class="color">エフェクトの色<input id="effectColor" type="color"></label>
+
+      <h2>タイミング</h2>
+      <div class="grid2">
+        <label>コマ数 <output id="framesOut"></output><input id="frames" type="range" min="5" max="20" step="1"></label>
+        <label>1ループの長さ<select id="duration"><option value="1">1秒</option><option value="2">2秒</option><option value="3">3秒</option><option value="4">4秒</option></select></label>
+        <label>ループ回数<select id="loops"></select></label>
+      </div>
+      <p class="hint">LINEの規定：5〜20コマ／合計4秒以内／ループ1〜4回／1ファイル300KB以下</p>
+    </section>
+  </main>
+
+  <footer class="foot">
+    <p>ZIPには <code>main.png</code>（240×240）・<code>tab.png</code>（96×74）・<code>01.png〜</code> が入っています。そのままLINE Creators Marketにアップロードできます。</p>
+  </footer>
+
+  <script src="js/encoder.js"></script>
+  <script src="js/animations.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>

@@ -4,17 +4,24 @@ This file provides guidance for AI assistants (Claude, etc.) working in the **ti
 
 ## Project Overview
 
-**time-flow** is a project hosted at [leoleoyky-spec/time-flow](https://github.com/leoleoyky-spec/time-flow). The repository is in its initial setup phase.
+**time-flow** is a project hosted at [leoleoyky-spec/time-flow](https://github.com/leoleoyky-spec/time-flow). It currently contains **うごくスタンプメーカー**, a dependency-free browser app that creates LINE animated stickers (APNG).
 
 ## Repository Structure
 
 ```
 time-flow/
-├── CLAUDE.md          # AI assistant guidance (this file)
-└── (project files to be added)
+├── CLAUDE.md            # AI assistant guidance (this file)
+├── index.html           # App markup (Japanese UI)
+├── css/style.css        # Styles (light/dark, responsive)
+├── js/encoder.js        # APNG assembly, palette quantizer, indexed PNG, ZIP (browser + Node)
+├── js/animations.js     # Sticker drawing: motions, effects, text layout
+├── js/app.js            # UI state, preview, export, localStorage persistence
+├── test/                # node:test unit tests for js/encoder.js
+└── package.json         # npm scripts (no dependencies)
 ```
 
-> **Note:** This project is newly initialized. Update this section as the codebase grows.
+LINE animated sticker rules the app enforces: 320×270 px, 5–20 frames, total playback ≤ 4 s,
+1–4 loops, ≤ 300 KB per file, sets of 8/16/24, plus `main.png` (240×240 APNG) and `tab.png` (96×74).
 
 ## Development Workflow
 
@@ -69,11 +76,12 @@ time-flow/
 
 ## Build & Run
 
-> **TODO:** Update this section once the project's build system and scripts are established.
+No build step. Serve the repo root over HTTP and open it: `npm start` (runs `python3 -m http.server 8000`).
+Opening `index.html` directly via `file://` also works (plain scripts, no ES modules).
 
 ## Testing
 
-> **TODO:** Update this section once the test framework is configured.
+`npm test` runs the Node built-in test runner (`node --test`) against `test/*.test.js`.
 
 ## CI/CD
 
