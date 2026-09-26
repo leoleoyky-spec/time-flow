@@ -1,0 +1,9 @@
+file,motion,text,frames,seconds,loops
+input/01.png,bounce,ありがとう,10,1,3
+input/02.png,pop,OK!,10,1,3
+input/03.png,swing,おはよう,10,1,3
+input/04.png,shake,えっ!?,10,1,3
+input/05.png,heartbeat,すき,10,1,3
+input/06.png,float,おやすみ,10,1,3
+input/07.png,jump,やったー,10,1,3
+input/08.png,fadein,ごめんね,10,1,3

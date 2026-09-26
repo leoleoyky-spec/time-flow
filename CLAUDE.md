@@ -10,8 +10,12 @@ This file provides guidance for AI assistants (Claude, etc.) working in the **ti
 
 ```
 time-flow/
-├── CLAUDE.md          # AI assistant guidance (this file)
-└── (project files to be added)
+├── CLAUDE.md                 # AI assistant guidance (this file)
+└── line-animated-stamps/     # LINE アニメーションスタンプ一括作成ツール (Python + Pillow)
+    ├── make_stamps.py        # 生成・仕様チェック・ZIP作成 (python make_stamps.py --demo)
+    ├── stamps.csv            # スタンプ一覧のテンプレート
+    ├── input/                # ユーザーのイラスト置き場
+    └── tests/                # pytest (python -m pytest tests)
 ```
 
 > **Note:** This project is newly initialized. Update this section as the codebase grows.
