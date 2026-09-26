@@ -340,11 +340,12 @@
       return '読みとった内容：' + req.understood.join('・') + `（部分${partSel + 1}に設定）`;
     }
     pendingPart = req;
+    showTab('image');
     partMode = 'draw';
     stroke = null;
     syncParts();
     $('partsPanel').scrollIntoView({ behavior: 'smooth', block: 'center' });
-    return `${req.name}がどこにあるか、まだわからないよ。下の「一部分だけ動かす」の画像で、${req.name}を指でぐるっと囲んでね。囲むとすぐ動きます`;
+    return `${req.name}がどこにあるか、まだわからないよ。「画像」タブの「一部分だけ動かす」で、${req.name}を指でぐるっと囲んでね。囲むとすぐ動きます`;
   }
 
   // ---------- rendering ----------
@@ -367,6 +368,7 @@
     const cycle = st.duration * 1000;
     const frame = Math.floor((((now - startTime) % cycle) / cycle) * st.frames);
     renderSticker(preview, st, frame / st.frames);
+    if (!$('miniPreview').hidden) renderSticker($('miniCanvas'), st, frame / st.frames);
     requestAnimationFrame(tick);
   }
 
@@ -671,6 +673,20 @@
       downAt = null;
     });
 
+    document.querySelectorAll('.tabs [role="tab"]').forEach((b) => b.addEventListener('click', () => showTab(b.dataset.tab)));
+    let savedTab = 'text';
+    try {
+      savedTab = localStorage.getItem(TAB_KEY) || 'text';
+    } catch (e) {}
+    showTab(savedTab, true);
+
+    $('miniPreview').addEventListener('click', () => $('preview').scrollIntoView({ behavior: 'smooth', block: 'center' }));
+    if ('IntersectionObserver' in window) {
+      new IntersectionObserver(([entry]) => {
+        $('miniPreview').hidden = entry.isIntersecting;
+      }, { threshold: 0.35 }).observe(document.querySelector('.stage'));
+    }
+
     $('exportOne').addEventListener('click', exportOne);
     $('exportZip').addEventListener('click', exportZip);
   }
@@ -681,6 +697,25 @@
     const userPicked = before && before.color && st.effectColor !== before.color;
     st.effect = id;
     if (!userPicked && EFFECTS[id] && EFFECTS[id].color) st.effectColor = EFFECTS[id].color;
+  }
+
+  const TAB_KEY = 'ugoku-stamp-maker:tab';
+  function showTab(name, initial) {
+    if (!$('page-' + name)) name = 'text';
+    document.querySelectorAll('.tabs [role="tab"]').forEach((b) => {
+      const on = b.dataset.tab === name;
+      b.setAttribute('aria-selected', String(on));
+      b.tabIndex = on ? 0 : -1;
+      $('page-' + b.dataset.tab).hidden = !on;
+    });
+    try {
+      localStorage.setItem(TAB_KEY, name);
+    } catch (e) {}
+    // Bring the top of the new page into view if the tabs were scrolled past it.
+    if (!initial) {
+      const tabs = document.querySelector('.tabs');
+      if (tabs.getBoundingClientRect().top <= 1) tabs.parentElement.scrollIntoView({ block: 'start' });
+    }
   }
 
   function buildChips(container, defs, onPick) {

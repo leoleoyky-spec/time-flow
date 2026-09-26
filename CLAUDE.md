@@ -11,7 +11,7 @@ This file provides guidance for AI assistants (Claude, etc.) working in the **ti
 ```
 time-flow/
 ├── CLAUDE.md            # AI assistant guidance (this file)
-├── index.html           # App markup (Japanese UI)
+├── index.html           # App markup (Japanese UI; editor split into 4 tabs)
 ├── css/style.css        # Styles (light/dark, responsive)
 ├── js/encoder.js        # APNG assembly, palette quantizer, indexed PNG, ZIP (browser + Node)
 ├── js/animations.js     # Sticker drawing: motions, effects, text layout

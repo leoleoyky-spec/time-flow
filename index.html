@@ -53,6 +53,18 @@
     </section>
 
     <section class="panel editor" aria-label="編集">
+      <div class="tabs" role="tablist" aria-label="編集メニュー">
+        <button type="button" role="tab" id="tab-text" data-tab="text" aria-controls="page-text">おまかせ・文字</button>
+        <button type="button" role="tab" id="tab-image" data-tab="image" aria-controls="page-image">画像</button>
+        <button type="button" role="tab" id="tab-motion" data-tab="motion" aria-controls="page-motion">うごき</button>
+        <button type="button" role="tab" id="tab-extra" data-tab="extra" aria-controls="page-extra">飾り・時間</button>
+        <button type="button" id="miniPreview" class="mini-preview" aria-label="大きいプレビューにもどる" hidden>
+          <canvas id="miniCanvas" width="320" height="270"></canvas>
+          <span>タップで大きく表示</span>
+        </button>
+      </div>
+
+      <div class="tab-page" id="page-text" role="tabpanel" aria-labelledby="tab-text">
       <div class="wish">
         <h2><label for="wishText">言葉でおまかせ</label></h2>
         <p class="hint">作りたいスタンプを日本語で書くと、文字・色・飾り・動きをまとめて設定します。スタンプの文字は「　」でかこんでね。</p>
@@ -72,6 +84,9 @@
         <label>フチの太さ<input id="strokeWidth" type="range" min="0" max="16" step="1"></label>
       </div>
 
+      </div>
+
+      <div class="tab-page" id="page-image" role="tabpanel" aria-labelledby="tab-image" hidden>
       <h2>イラスト・写真 <small>（任意）</small></h2>
       <div class="image-row">
         <label class="btn small ghost file">画像を選ぶ<input id="image" type="file" accept="image/*"></label>
@@ -109,6 +124,9 @@
         </div>
       </div>
 
+      </div>
+
+      <div class="tab-page" id="page-motion" role="tabpanel" aria-labelledby="tab-motion" hidden>
       <h2>うごき</h2>
       <div id="motions" class="chips" role="radiogroup" aria-label="うごき"></div>
       <div id="customPanel" class="custom-panel" hidden>
@@ -135,6 +153,9 @@
         </div>
       </div>
 
+      </div>
+
+      <div class="tab-page" id="page-extra" role="tabpanel" aria-labelledby="tab-extra" hidden>
       <h2>エフェクト</h2>
       <div id="effects" class="chips" role="radiogroup" aria-label="エフェクト"></div>
       <label class="color">エフェクトの色<input id="effectColor" type="color"></label>
@@ -146,6 +167,7 @@
         <label>ループ回数<select id="loops"></select></label>
       </div>
       <p class="hint">LINEの規定：5〜20コマ／合計4秒以内／ループ1〜4回／1ファイル300KB以下</p>
+      </div>
     </section>
   </main>
 
