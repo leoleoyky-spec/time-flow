@@ -1,9 +1,9 @@
 (function () {
   'use strict';
 
-  const { FONTS, MOTIONS, EFFECTS, CUSTOM_WAVES, defaultSticker, drawFrame } = window.Stickers;
+  const { FONTS, MOTIONS, EFFECTS, CUSTOM_WAVES, CUSTOM_PATHS, defaultSticker, drawFrame } = window.Stickers;
   const { assembleAPNG, quantize, encodeIndexedPNG, createZip } = window.Encoder;
-  const { parseMotionText, EXAMPLES: MOTION_EXAMPLES } = window.MotionWords;
+  const { parseMotionText, parseInstruction, EXAMPLES: MOTION_EXAMPLES, WISH_EXAMPLES } = window.MotionWords;
   const { removeBackgroundPixels } = window.BgRemove;
 
   const W = 320;
@@ -197,7 +197,7 @@
   const fields = ['text', 'font', 'fontSize', 'color', 'strokeColor', 'strokeWidth', 'imageScale', 'effectColor', 'frames', 'duration', 'loops'];
   const numeric = new Set(['fontSize', 'strokeWidth', 'imageScale', 'frames', 'duration', 'loops']);
 
-  const CUSTOM_SLIDERS = { customSpeed: 'speed', customMoveX: 'moveX', customMoveY: 'moveY', customRotate: 'rotate', customZoom: 'zoom' };
+  const CUSTOM_SLIDERS = { customSpeed: 'speed', customMoveX: 'moveX', customMoveY: 'moveY', customRotate: 'rotate', customZoom: 'zoom', customSquash: 'squash', customPause: 'pause' };
 
   function buildEditor() {
     $('font').innerHTML = FONTS.map((f) => `<option value="${f.id}">${f.label}</option>`).join('');
@@ -206,13 +206,55 @@
       changed();
     });
     buildChips($('effects'), EFFECTS, (id) => {
-      current().effect = id;
+      setEffect(current(), id);
       changed();
     });
     buildChips($('customWave'), CUSTOM_WAVES, (id) => {
       current().custom.wave = id;
       changed();
     });
+    buildChips($('customPath'), CUSTOM_PATHS, (id) => {
+      current().custom.path = id;
+      changed();
+    });
+
+    const applyWish = () => {
+      const { changes, understood } = parseInstruction($('wishText').value);
+      const plain = $('wishText').value.trim();
+      if (!understood.length && plain && plain.length <= 15) {
+        // Nothing to interpret: a short line is most likely the words for the sticker.
+        current().text = plain;
+        $('wishResult').textContent = `「${plain}」を文字として入れました（色や動きも書くと、まとめて設定できます）`;
+        changed();
+        return;
+      }
+      if (!understood.length) {
+        $('wishResult').textContent = $('wishText').value.trim()
+          ? 'ごめんね、わかる言葉が見つからなかったよ。下の例を参考にしてね'
+          : '作りたいスタンプを書いてね';
+        return;
+      }
+      const st = current();
+      const { custom, effect, ...fields } = changes;
+      if (effect) setEffect(st, effect);
+      Object.assign(st, fields);
+      if (custom) Object.assign(st.custom, custom, { text: '' });
+      st.loops = Math.min(st.loops, Math.max(1, Math.floor(4 / st.duration)));
+      $('wishResult').textContent = '読みとった内容：' + understood.join(' / ');
+      changed(!!fields.font);
+    };
+    $('wishApply').addEventListener('click', applyWish);
+    for (const ex of WISH_EXAMPLES) {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'chip';
+      b.textContent = ex;
+      b.addEventListener('click', () => {
+        $('wishText').value = ex;
+        applyWish();
+      });
+      $('wishExamples').append(b);
+    }
 
     for (const key of fields) {
       $(key).addEventListener('input', () => {
@@ -340,6 +382,14 @@
     $('exportZip').addEventListener('click', exportZip);
   }
 
+  // Switch effect; keep a color the user picked, otherwise use the new effect's own color.
+  function setEffect(st, id) {
+    const before = EFFECTS[st.effect];
+    const userPicked = before && before.color && st.effectColor !== before.color;
+    st.effect = id;
+    if (!userPicked && EFFECTS[id] && EFFECTS[id].color) st.effectColor = EFFECTS[id].color;
+  }
+
   function buildChips(container, defs, onPick) {
     for (const [id, def] of Object.entries(defs)) {
       const b = document.createElement('button');
@@ -422,7 +472,7 @@
       if ($(key).value !== String(st[key])) $(key).value = st[key];
     }
     $('framesOut').textContent = st.frames;
-    for (const [container, val] of [[$('motions'), st.motion], [$('effects'), st.effect], [$('customWave'), st.custom.wave]]) {
+    for (const [container, val] of [[$('motions'), st.motion], [$('effects'), st.effect], [$('customWave'), st.custom.wave], [$('customPath'), st.custom.path]]) {
       container.querySelectorAll('.chip').forEach((c) => c.setAttribute('aria-checked', String(c.dataset.value === val)));
     }
     $('clearImage').disabled = !st.image;
@@ -472,6 +522,7 @@
   function select(i) {
     state.selected = i;
     $('customResult').textContent = '';
+    $('wishResult').textContent = '';
     startTime = performance.now();
     syncEditor();
     renderList();

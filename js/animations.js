@@ -133,14 +133,15 @@
     return Math.sin(phase);
   }
 
+  // `color` is the effect's natural color, used until the user picks their own.
   const EFFECTS = {
     none: { label: 'なし', fn: () => {} },
-    sparkle: { label: 'キラキラ', fn: drawSparkles },
-    hearts: { label: 'ハート', fn: drawHearts },
-    lines: { label: '集中線', fn: drawFocusLines },
-    sweat: { label: '汗', fn: drawSweat },
-    notes: { label: '音符', fn: drawNotes },
-    anger: { label: 'プンプン', fn: drawAnger },
+    sparkle: { label: 'キラキラ', fn: drawSparkles, color: '#ffd23f' },
+    hearts: { label: 'ハート', fn: drawHearts, color: '#ff5a8a' },
+    lines: { label: '集中線', fn: drawFocusLines, color: '#333333' },
+    sweat: { label: '汗', fn: drawSweat, color: '#5ab4f0' },
+    notes: { label: '音符', fn: drawNotes, color: '#ff8a3d' },
+    anger: { label: 'プンプン', fn: drawAnger, color: '#e5484d' },
   };
 
   function easeOutBack(p) {

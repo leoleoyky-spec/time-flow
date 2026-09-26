@@ -15,7 +15,7 @@ time-flow/
 ├── css/style.css        # Styles (light/dark, responsive)
 ├── js/encoder.js        # APNG assembly, palette quantizer, indexed PNG, ZIP (browser + Node)
 ├── js/animations.js     # Sticker drawing: motions, effects, text layout
-├── js/motion-words.js   # Japanese text → custom-motion slider values (browser + Node)
+├── js/motion-words.js   # Japanese text → motion sliders / whole-sticker settings (browser + Node)
 ├── js/bg-remove.js      # Background removal on raw RGBA pixels (browser + Node)
 ├── js/app.js            # UI state, preview, export, localStorage persistence
 ├── test/                # node:test unit tests for the browser+Node modules
@@ -38,7 +38,10 @@ Two features worth knowing about when touching `js/app.js` or `js/animations.js`
   from `sticker.custom` (wave shape, speed, move X/Y, rotate, zoom) instead of a fixed formula, for
   when the built-in motion presets aren't specific enough. Users can also type the motion in
   Japanese ("大きく2回跳ねる"); `parseMotionText()` in `js/motion-words.js` maps keywords to those
-  slider values. It is deliberately keyword-based (no AI call) so the app stays free and offline.
+  slider values; the same file's `parseInstruction()` powers the 「言葉でおまかせ」 box, reading
+  quoted sticker text, colors (assigned to the nearest noun: 文字/フチ/effect), effect, font, size
+  and timing from one sentence. Both are deliberately keyword-based (no AI call) so the app stays
+  free and offline for whoever it's shared with.
 
 ## Development Workflow
 

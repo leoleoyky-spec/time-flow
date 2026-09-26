@@ -157,6 +157,11 @@ button, input, select, textarea { font: inherit; color: inherit; }
   background: repeating-conic-gradient(var(--checker-a) 0 25%, var(--checker-b) 0 50%) 0 0 / 12px 12px;
 }
 
+.wish { padding: 12px; margin-bottom: 4px; border-radius: 12px; background: var(--accent-soft); display: grid; gap: 8px; }
+.wish h2 { margin: 0 !important; }
+.wish .hint { margin: 0; }
+.wish textarea { font-size: 16px !important; background: var(--panel) !important; }
+.wish-btn { width: 100%; }
 .words-label { font-size: 14px !important; font-weight: 700; color: var(--ink) !important; }
 .words-row { display: flex; gap: 6px; margin-top: 6px; }
 .words-row input { flex: 1; min-width: 0; border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; background: var(--panel); font-size: 16px; }

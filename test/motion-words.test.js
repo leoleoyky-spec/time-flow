@@ -58,3 +58,46 @@ test('values stay inside the slider ranges', () => {
 test('every example chip is understood', () => {
   for (const ex of EXAMPLES) assert.notStrictEqual(parseMotionText(ex), null, ex);
 });
+
+test('円を描く, 止まる and 伸び縮み set the new controls', () => {
+  assert.strictEqual(parseMotionText('円を描いてふわふわ').custom.path, 'circle');
+  assert.ok(parseMotionText('跳ねて一瞬止まる').custom.pause > 0);
+  const r = parseMotionText('むにゅっと伸び縮み');
+  assert.ok(r.custom.squash > 0);
+  assert.strictEqual(r.custom.zoom, 0, '伸び縮み must not also count as 縮む');
+});
+
+const { parseInstruction, WISH_EXAMPLES } = require('../js/motion-words.js');
+
+test('parseInstruction reads text, colors, effect, font and motion together', () => {
+  const { changes } = parseInstruction('「ありがとう」を赤い文字と白いフチで、ハートを出して大きく2回跳ねる');
+  assert.strictEqual(changes.text, 'ありがとう');
+  assert.strictEqual(changes.color, '#e5484d');
+  assert.strictEqual(changes.strokeColor, '#ffffff');
+  assert.strictEqual(changes.effect, 'hearts');
+  assert.strictEqual(changes.motion, 'custom');
+  assert.strictEqual(changes.custom.speed, 2);
+});
+
+test('a color followed by an effect word colors the effect', () => {
+  const { changes } = parseInstruction('水色のキラキラ');
+  assert.strictEqual(changes.effectColor, '#38bdf8');
+  assert.strictEqual(changes.effect, 'sparkle');
+  assert.ok(!('color' in changes));
+});
+
+test('font, size and timing words', () => {
+  const { changes } = parseInstruction('手書きで文字を大きく、なめらかに3秒');
+  assert.strictEqual(changes.font, 'Yusei Magic');
+  assert.strictEqual(changes.fontSize, 96);
+  assert.strictEqual(changes.frames, 20);
+  assert.strictEqual(changes.duration, 3);
+});
+
+test('動かさない turns motion off', () => {
+  assert.strictEqual(parseInstruction('動かさないで').changes.motion, 'none');
+});
+
+test('every おまかせ example is understood', () => {
+  for (const ex of WISH_EXAMPLES) assert.ok(parseInstruction(ex).understood.length >= 3, ex);
+});

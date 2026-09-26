@@ -53,6 +53,15 @@
     </section>
 
     <section class="panel editor" aria-label="編集">
+      <div class="wish">
+        <h2><label for="wishText">言葉でおまかせ</label></h2>
+        <p class="hint">作りたいスタンプを日本語で書くと、文字・色・飾り・動きをまとめて設定します。スタンプの文字は「　」でかこんでね。</p>
+        <textarea id="wishText" rows="3" placeholder="例：「おはよう」をピンクの文字で、キラキラさせて、ゆっくりふわふわ"></textarea>
+        <button id="wishApply" type="button" class="btn wish-btn">この内容で作る</button>
+        <p id="wishResult" class="hint" role="status"></p>
+        <div id="wishExamples" class="chips examples" aria-label="例"></div>
+      </div>
+
       <h2>テキスト</h2>
       <textarea id="text" rows="2" placeholder="例：ありがとう！"></textarea>
       <div class="grid2">
@@ -93,6 +102,8 @@
         <p id="customResult" class="hint" role="status"></p>
         <div id="customExamples" class="chips examples" aria-label="例"></div>
         <p class="hint fine-tune">細かい調整（言葉で動かしたあとにさわってもOK）</p>
+        <p class="hint">動く道すじ</p>
+        <div id="customPath" class="chips" role="radiogroup" aria-label="動く道すじ"></div>
         <p class="hint">リズム</p>
         <div id="customWave" class="chips" role="radiogroup" aria-label="リズム"></div>
         <div class="grid2">
@@ -101,6 +112,8 @@
           <label>上下の動き<input id="customMoveY" type="range" min="-100" max="100" step="5"></label>
           <label>左右の動き<input id="customMoveX" type="range" min="-100" max="100" step="5"></label>
           <label>回転<input id="customRotate" type="range" min="-45" max="45" step="1"></label>
+          <label>伸び縮み<input id="customSquash" type="range" min="-30" max="30" step="1"></label>
+          <label>止まる時間<input id="customPause" type="range" min="0" max="60" step="5"></label>
         </div>
       </div>
 
