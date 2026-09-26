@@ -145,6 +145,16 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .editor input[type="color"] { width: 44px; height: 30px; border: 1px solid var(--line); border-radius: 8px; padding: 2px; background: var(--bg); }
 .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 14px; margin-top: 10px; }
 .image-row { display: flex; gap: 8px; margin-bottom: 10px; }
+
+.bg-panel { margin-top: 12px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--bg); }
+.switch-row { flex-direction: row !important; align-items: center; gap: 8px; font-size: 14px; color: var(--ink) !important; accent-color: var(--accent); cursor: pointer; }
+.bg-controls { margin-top: 10px; display: grid; gap: 8px; }
+#bgPickCanvas {
+  width: 100%; max-width: 220px; border-radius: 8px; cursor: crosshair; display: block;
+  background: repeating-conic-gradient(var(--checker-a) 0 25%, var(--checker-b) 0 50%) 0 0 / 12px 12px;
+}
+
+.custom-panel { margin-top: 8px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--bg); }
 output { color: var(--ink); font-weight: 700; }
 
 .foot { padding: 0 24px 32px; color: var(--muted); font-size: 12px; }

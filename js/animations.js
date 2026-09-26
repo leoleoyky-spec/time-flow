@@ -80,7 +80,43 @@
     blink: { label: 'チカチカ', fn: (t) => ({ alpha: Math.floor(t * 4) % 2 === 0 ? 1 : 0.15 }) },
     typing: { label: '1文字ずつ', fn: (t) => ({ reveal: Math.min(1, t / 0.7) }) },
     rainbow: { label: 'レインボー', fn: (t) => ({ hue: t * 360 }) },
+    custom: {
+      label: 'カスタム（細かく指定）',
+      // Reads sticker.custom instead of following a fixed formula, so every
+      // slider the editor exposes maps straight to one term below.
+      fn: (t, W, H, sticker) => {
+        const cfg = (sticker && sticker.custom) || {};
+        const wave = waveShape(cfg.wave, t * TAU * (cfg.speed || 1));
+        const rot = ((cfg.rotate || 0) * Math.PI) / 180;
+        const s = 1 + wave * ((cfg.zoom || 0) / 100);
+        return {
+          x: wave * ((cfg.moveX || 0) / 100) * W * 0.18,
+          y: wave * ((cfg.moveY || 0) / 100) * H * 0.18,
+          rot: wave * rot,
+          sx: s,
+          sy: s,
+        };
+      },
+    },
   };
+
+  const CUSTOM_WAVES = {
+    smooth: { label: 'なめらか' },
+    bounce: { label: 'はねる' },
+    shake: { label: 'ぶるぶる' },
+  };
+
+  // Shared shape for the custom motion's four sliders, so they all move in sync.
+  function waveShape(kind, phase) {
+    if (kind === 'bounce') {
+      const s = Math.sin(phase);
+      return Math.sign(s) * (1 - Math.pow(1 - Math.abs(s), 3));
+    }
+    if (kind === 'shake') {
+      return Math.sin(phase) * 0.6 + Math.sin(phase * 2.7 + 1) * 0.3 + Math.sin(phase * 5.3 + 2) * 0.1;
+    }
+    return Math.sin(phase);
+  }
 
   const EFFECTS = {
     none: { label: 'なし', fn: () => {} },
@@ -106,11 +142,14 @@
       color: '#ff5a8a',
       strokeColor: '#ffffff',
       strokeWidth: 8,
-      image: null, // data URL
+      image: null, // data URL actually drawn (may be background-removed)
+      originalImage: null, // data URL as uploaded, kept so bg removal can be redone/undone
       imageScale: 1,
       motion: 'bounce',
       effect: 'sparkle',
       effectColor: '#ffd23f',
+      custom: { wave: 'smooth', speed: 1, moveX: 0, moveY: 22, rotate: 6, zoom: 6 },
+      bg: { enabled: false, tolerance: 30, color: null }, // color: null = auto-detect from the corners
     };
   }
 
@@ -163,7 +202,7 @@
     ctx.clearRect(0, 0, W, H);
     ctx.save();
 
-    const motion = (MOTIONS[sticker.motion] || MOTIONS.none).fn(t, W, H);
+    const motion = (MOTIONS[sticker.motion] || MOTIONS.none).fn(t, W, H, sticker);
     const innerW = W - MARGIN * 2;
     const innerH = H - MARGIN * 2;
     const hasText = sticker.text.trim().length > 0;
@@ -377,5 +416,5 @@
     return x - Math.floor(x);
   }
 
-  root.Stickers = { FONTS, MOTIONS, EFFECTS, defaultSticker, drawFrame };
+  root.Stickers = { FONTS, MOTIONS, EFFECTS, CUSTOM_WAVES, defaultSticker, drawFrame };
 })(window);

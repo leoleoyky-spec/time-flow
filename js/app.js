@@ -1,7 +1,7 @@
 (function () {
   'use strict';
 
-  const { FONTS, MOTIONS, EFFECTS, defaultSticker, drawFrame } = window.Stickers;
+  const { FONTS, MOTIONS, EFFECTS, CUSTOM_WAVES, defaultSticker, drawFrame } = window.Stickers;
   const { assembleAPNG, quantize, encodeIndexedPNG, createZip } = window.Encoder;
 
   const W = 320;
@@ -54,6 +54,7 @@
       img.onload = () => {
         entry.ready = true;
         renderList();
+        if (src === current().originalImage) drawBgPickCanvas(src);
       };
       img.src = src;
       imageCache.set(src, entry);
@@ -81,6 +82,109 @@
       };
       img.src = url;
     });
+  }
+
+  // ---------- background removal ----------
+  function loadImageEl(src) {
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      img.onload = () => resolve(img);
+      img.onerror = () => reject(new Error('画像を読み込めませんでした'));
+      img.src = src;
+    });
+  }
+
+  function sampleCorners(d, w, h) {
+    const at = (x, y) => {
+      const i = (y * w + x) * 4;
+      return [d[i], d[i + 1], d[i + 2]];
+    };
+    const corners = [at(0, 0), at(w - 1, 0), at(0, h - 1), at(w - 1, h - 1)];
+    return corners.reduce((sum, c) => sum.map((v, i) => v + c[i] / 4), [0, 0, 0]);
+  }
+
+  // Soften the hard cutout edge left by the flood fill by lightly blurring alpha only.
+  function featherAlpha(d, w, h) {
+    const alpha = new Uint8ClampedArray(w * h);
+    for (let i = 0; i < w * h; i++) alpha[i] = d[i * 4 + 3];
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        let sum = 0;
+        let count = 0;
+        for (let dy = -1; dy <= 1; dy++) {
+          for (let dx = -1; dx <= 1; dx++) {
+            const nx = x + dx;
+            const ny = y + dy;
+            if (nx < 0 || ny < 0 || nx >= w || ny >= h) continue;
+            sum += alpha[ny * w + nx];
+            count++;
+          }
+        }
+        d[(y * w + x) * 4 + 3] = Math.round(sum / count);
+      }
+    }
+  }
+
+  /**
+   * Cut a flat-color background out of an uploaded image.
+   * Flood-fills from the four edges, removing pixels close to the target
+   * color (a chosen click, or the average of the corners), then softens
+   * the cut edge. Works well for a solid-color sheet or backdrop; a busy
+   * photo background will need the sensitivity turned down or a color pick.
+   */
+  async function removeBackground(dataUrl, { tolerance, color }) {
+    const img = await loadImageEl(dataUrl);
+    const maxDim = 900;
+    const scale = Math.min(1, maxDim / Math.max(img.width, img.height));
+    const w = Math.max(1, Math.round(img.width * scale));
+    const h = Math.max(1, Math.round(img.height * scale));
+    const c = document.createElement('canvas');
+    c.width = w;
+    c.height = h;
+    const ctx = c.getContext('2d', { willReadFrequently: true });
+    ctx.drawImage(img, 0, 0, w, h);
+    const id = ctx.getImageData(0, 0, w, h);
+    const d = id.data;
+    const target = color || sampleCorners(d, w, h);
+    const thresh = tolerance * 2.55;
+    const idx = (x, y) => y * w + x;
+    const dist = (i) => {
+      const o = i * 4;
+      const dr = d[o] - target[0];
+      const dg = d[o + 1] - target[1];
+      const db = d[o + 2] - target[2];
+      return Math.sqrt(dr * dr + dg * dg + db * db);
+    };
+    const bg = new Uint8Array(w * h);
+    const stack = [];
+    const seed = (x, y) => {
+      const i = idx(x, y);
+      if (!bg[i] && dist(i) <= thresh) {
+        bg[i] = 1;
+        stack.push(i);
+      }
+    };
+    for (let x = 0; x < w; x++) {
+      seed(x, 0);
+      seed(x, h - 1);
+    }
+    for (let y = 0; y < h; y++) {
+      seed(0, y);
+      seed(w - 1, y);
+    }
+    while (stack.length) {
+      const i = stack.pop();
+      const x = i % w;
+      const y = (i / w) | 0;
+      if (x > 0) seed(x - 1, y);
+      if (x < w - 1) seed(x + 1, y);
+      if (y > 0) seed(x, y - 1);
+      if (y < h - 1) seed(x, y + 1);
+    }
+    for (let i = 0; i < w * h; i++) if (bg[i]) d[i * 4 + 3] = 0;
+    featherAlpha(d, w, h);
+    ctx.putImageData(id, 0, 0);
+    return c.toDataURL('image/png');
   }
 
   // ---------- rendering ----------
@@ -148,10 +252,22 @@
   const fields = ['text', 'font', 'fontSize', 'color', 'strokeColor', 'strokeWidth', 'imageScale', 'effectColor', 'frames', 'duration', 'loops'];
   const numeric = new Set(['fontSize', 'strokeWidth', 'imageScale', 'frames', 'duration', 'loops']);
 
+  const CUSTOM_SLIDERS = { customSpeed: 'speed', customMoveX: 'moveX', customMoveY: 'moveY', customRotate: 'rotate', customZoom: 'zoom' };
+
   function buildEditor() {
     $('font').innerHTML = FONTS.map((f) => `<option value="${f.id}">${f.label}</option>`).join('');
-    buildChips($('motions'), MOTIONS, 'motion');
-    buildChips($('effects'), EFFECTS, 'effect');
+    buildChips($('motions'), MOTIONS, (id) => {
+      current().motion = id;
+      changed();
+    });
+    buildChips($('effects'), EFFECTS, (id) => {
+      current().effect = id;
+      changed();
+    });
+    buildChips($('customWave'), CUSTOM_WAVES, (id) => {
+      current().custom.wave = id;
+      changed();
+    });
 
     for (const key of fields) {
       $(key).addEventListener('input', () => {
@@ -162,20 +278,63 @@
       });
     }
 
+    for (const [elId, prop] of Object.entries(CUSTOM_SLIDERS)) {
+      $(elId).addEventListener('input', () => {
+        current().custom[prop] = Number($(elId).value);
+        changed();
+      });
+    }
+
     $('image').addEventListener('change', async (e) => {
       const file = e.target.files[0];
       e.target.value = '';
       if (!file) return;
       try {
-        current().image = await readImageFile(file);
+        const dataUrl = await readImageFile(file);
+        const st = current();
+        st.originalImage = dataUrl;
+        st.image = dataUrl;
+        st.bg = { enabled: false, tolerance: 30, color: null };
         changed();
       } catch (err) {
         setStatus(err.message, true);
       }
     });
     $('clearImage').addEventListener('click', () => {
-      current().image = null;
+      const st = current();
+      st.image = null;
+      st.originalImage = null;
+      st.bg = { enabled: false, tolerance: 30, color: null };
       changed();
+    });
+
+    $('bgToggle').addEventListener('change', () => {
+      current().bg.enabled = $('bgToggle').checked;
+      applyBackgroundRemoval();
+      syncEditor();
+    });
+    $('bgTolerance').addEventListener('input', debounce(() => {
+      current().bg.tolerance = Number($('bgTolerance').value);
+      applyBackgroundRemoval();
+    }, 250));
+    $('bgAuto').addEventListener('click', () => {
+      current().bg.color = null;
+      current().bg.enabled = true;
+      applyBackgroundRemoval();
+      syncEditor();
+    });
+    $('bgPickCanvas').addEventListener('click', (e) => {
+      const st = current();
+      if (!st.originalImage) return;
+      const canvas = e.currentTarget;
+      const rect = canvas.getBoundingClientRect();
+      const x = Math.min(canvas.width - 1, Math.max(0, Math.floor(((e.clientX - rect.left) / rect.width) * canvas.width)));
+      const y = Math.min(canvas.height - 1, Math.max(0, Math.floor(((e.clientY - rect.top) / rect.height) * canvas.height)));
+      const [r, g, b] = canvas.getContext('2d').getImageData(x, y, 1, 1).data;
+      st.bg.color = [r, g, b];
+      st.bg.enabled = true;
+      applyBackgroundRemoval();
+      syncEditor();
     });
 
     $('add').addEventListener('click', () => {
@@ -184,7 +343,8 @@
       select(state.stickers.length - 1);
     });
     $('duplicate').addEventListener('click', () => {
-      state.stickers.splice(state.selected + 1, 0, { ...current() });
+      const copy = { ...current(), custom: { ...current().custom }, bg: { ...current().bg } };
+      state.stickers.splice(state.selected + 1, 0, copy);
       select(state.selected + 1);
     });
     $('remove').addEventListener('click', () => {
@@ -204,7 +364,7 @@
     $('exportZip').addEventListener('click', exportZip);
   }
 
-  function buildChips(container, defs, key) {
+  function buildChips(container, defs, onPick) {
     for (const [id, def] of Object.entries(defs)) {
       const b = document.createElement('button');
       b.type = 'button';
@@ -212,12 +372,53 @@
       b.dataset.value = id;
       b.setAttribute('role', 'radio');
       b.textContent = def.label;
-      b.addEventListener('click', () => {
-        current()[key] = id;
-        changed();
-      });
+      b.addEventListener('click', () => onPick(id));
       container.append(b);
     }
+  }
+
+  function debounce(fn, ms) {
+    let t = 0;
+    return (...args) => {
+      clearTimeout(t);
+      t = setTimeout(() => fn(...args), ms);
+    };
+  }
+
+  // Re-runs the cutout when background removal is on, or restores the original upload when it's off.
+  let bgToken = 0;
+  async function applyBackgroundRemoval() {
+    const st = current();
+    if (!st.originalImage) return;
+    const token = ++bgToken;
+    if (!st.bg.enabled) {
+      if (st.image && st.image !== st.originalImage) imageCache.delete(st.image);
+      st.image = st.originalImage;
+      changed();
+      return;
+    }
+    setStatus('背景を透明にしています…');
+    try {
+      const result = await removeBackground(st.originalImage, { tolerance: st.bg.tolerance, color: st.bg.color });
+      if (token !== bgToken) return; // a newer request superseded this one
+      if (st.image && st.image !== st.originalImage && st.image !== result) imageCache.delete(st.image);
+      st.image = result;
+      changed();
+      setStatus('背景を透明にしました');
+    } catch (err) {
+      setStatus('背景の透明化に失敗しました：' + err.message, true);
+    }
+  }
+
+  function drawBgPickCanvas(originalImage) {
+    const canvas = $('bgPickCanvas');
+    const img = getImage(originalImage);
+    if (!img) return; // not decoded yet; getImage() re-renders once it loads
+    const w = 220;
+    const h = Math.max(1, Math.round((img.height / img.width) * w));
+    canvas.width = w;
+    canvas.height = h;
+    canvas.getContext('2d').drawImage(img, 0, 0, w, h);
   }
 
   // Total playback (duration x loops) must be 4 seconds or less.
@@ -238,13 +439,26 @@
       if ($(key).value !== String(st[key])) $(key).value = st[key];
     }
     $('framesOut').textContent = st.frames;
-    for (const [container, key] of [[$('motions'), 'motion'], [$('effects'), 'effect']]) {
-      container.querySelectorAll('.chip').forEach((c) => c.setAttribute('aria-checked', String(c.dataset.value === st[key])));
+    for (const [container, val] of [[$('motions'), st.motion], [$('effects'), st.effect], [$('customWave'), st.custom.wave]]) {
+      container.querySelectorAll('.chip').forEach((c) => c.setAttribute('aria-checked', String(c.dataset.value === val)));
     }
     $('clearImage').disabled = !st.image;
     $('specFrames').textContent = `${st.frames}コマ`;
     $('specTime').textContent = `${st.duration}秒 × ${st.loops}回`;
     updateSize(st);
+
+    $('customPanel').hidden = st.motion !== 'custom';
+    for (const [elId, prop] of Object.entries(CUSTOM_SLIDERS)) {
+      if ($(elId).value !== String(st.custom[prop])) $(elId).value = st.custom[prop];
+    }
+
+    $('bgPanel').hidden = !st.originalImage;
+    if (st.originalImage) {
+      $('bgToggle').checked = st.bg.enabled;
+      $('bgControls').hidden = !st.bg.enabled;
+      $('bgTolerance').value = st.bg.tolerance;
+      drawBgPickCanvas(st.originalImage);
+    }
   }
 
   let sizeToken = 0;

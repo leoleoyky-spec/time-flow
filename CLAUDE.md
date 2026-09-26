@@ -23,6 +23,15 @@ time-flow/
 LINE animated sticker rules the app enforces: 320×270 px, 5–20 frames, total playback ≤ 4 s,
 1–4 loops, ≤ 300 KB per file, sets of 8/16/24, plus `main.png` (240×240 APNG) and `tab.png` (96×74).
 
+Two features worth knowing about when touching `js/app.js` or `js/animations.js`:
+- **Background removal**: `removeBackground()` in `js/app.js` flood-fills a flat background out of
+  an uploaded image (color picked by click or auto-detected from the corners), then feathers the
+  cut edge. A sticker keeps both `originalImage` (untouched upload) and `image` (what's drawn), so
+  toggling or re-tuning removal never re-compresses the source.
+- **Custom motion**: the `custom` entry in `MOTIONS` (`js/animations.js`) reads per-sticker sliders
+  from `sticker.custom` (wave shape, speed, move X/Y, rotate, zoom) instead of a fixed formula, for
+  when the built-in motion presets aren't specific enough.
+
 ## Development Workflow
 
 ### Branch Naming

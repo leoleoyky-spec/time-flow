@@ -63,15 +63,36 @@
         <label>フチの太さ<input id="strokeWidth" type="range" min="0" max="16" step="1"></label>
       </div>
 
-      <h2>イラスト・写真 <small>（任意・背景透過PNG推奨）</small></h2>
+      <h2>イラスト・写真 <small>（任意）</small></h2>
       <div class="image-row">
         <label class="btn small ghost file">画像を選ぶ<input id="image" type="file" accept="image/*"></label>
         <button id="clearImage" class="btn small ghost danger">画像を外す</button>
       </div>
       <label>画像の大きさ<input id="imageScale" type="range" min="0.3" max="1" step="0.05"></label>
 
+      <div id="bgPanel" class="bg-panel" hidden>
+        <label class="switch-row"><input id="bgToggle" type="checkbox"> 背景を透明にする</label>
+        <div id="bgControls" class="bg-controls" hidden>
+          <label>感度<input id="bgTolerance" type="range" min="5" max="70" step="1"></label>
+          <canvas id="bgPickCanvas" aria-label="背景の色をクリックして選ぶ"></canvas>
+          <p class="hint">画像の背景部分をクリックすると、その色をねらって透明にします</p>
+          <button id="bgAuto" type="button" class="btn small ghost">四隅の色から自動で検出</button>
+        </div>
+      </div>
+
       <h2>うごき</h2>
       <div id="motions" class="chips" role="radiogroup" aria-label="うごき"></div>
+      <div id="customPanel" class="custom-panel" hidden>
+        <p class="hint">リズム</p>
+        <div id="customWave" class="chips" role="radiogroup" aria-label="リズム"></div>
+        <div class="grid2">
+          <label>速さ<input id="customSpeed" type="range" min="1" max="4" step="1"></label>
+          <label>拡大縮小<input id="customZoom" type="range" min="-50" max="50" step="1"></label>
+          <label>上下の動き<input id="customMoveY" type="range" min="-100" max="100" step="5"></label>
+          <label>左右の動き<input id="customMoveX" type="range" min="-100" max="100" step="5"></label>
+          <label>回転<input id="customRotate" type="range" min="-45" max="45" step="1"></label>
+        </div>
+      </div>
 
       <h2>エフェクト</h2>
       <div id="effects" class="chips" role="radiogroup" aria-label="エフェクト"></div>
