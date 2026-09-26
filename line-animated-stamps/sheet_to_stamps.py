@@ -99,17 +99,25 @@ def _white_edge(layer, stroke):
 
 
 def cut_cell(cell, stroke=4):
-    """1マスを (文字レイヤー, キャラレイヤー) に分ける。どちらも白フチ付きの透過PNG."""
-    cell = cell.convert("RGB")
-    mn = _min_channel(cell)
-    ink = mn.point(lambda v: 255 if 255 - v > 32 else 0)
-    # 線画の色・濃さから透明度を作る (白い背景 → 透明)
-    soft = mn.point(lambda v: max(0, min(255, (240 - v) * 4)))
+    """1マスを (文字レイヤー, キャラレイヤー) に分ける。どちらも白フチ付きの透過PNG.
 
-    comps = _components(ink.filter(ImageFilter.MaxFilter(3)))
-    body = max(comps, key=len)
-    # キャラは線が途切れていても顔の白が抜けないよう、外形 (凸包) の内側を塗る
-    alpha = ImageChops.lighter(soft, _hull(body, cell.size))
+    背景透過済みの画像 (RGBA) なら元の透明度をそのまま使う。白背景の画像なら白を抜く。
+    """
+    if cell.mode == "RGBA":
+        alpha = cell.getchannel("A")
+        ink = alpha.point(lambda v: 255 if v > 40 else 0)
+        comps = _components(ink.filter(ImageFilter.MaxFilter(3)))
+        body = max(comps, key=len)
+    else:
+        cell = cell.convert("RGB")
+        mn = _min_channel(cell)
+        ink = mn.point(lambda v: 255 if 255 - v > 32 else 0)
+        # 線画の色・濃さから透明度を作る (白い背景 → 透明)
+        soft = mn.point(lambda v: max(0, min(255, (240 - v) * 4)))
+        comps = _components(ink.filter(ImageFilter.MaxFilter(3)))
+        body = max(comps, key=len)
+        # キャラは線が途切れていても顔の白が抜けないよう、外形 (凸包) の内側を塗る
+        alpha = ImageChops.lighter(soft, _hull(body, cell.size))
     top = min(y for _, y in body)
 
     text_mask = Image.new("L", cell.size, 0)
@@ -553,7 +561,10 @@ def main(argv=None):
     args = ap.parse_args(argv)
 
     cols, rows = (int(v) for v in args.grid.lower().split("x"))
-    sheet = Image.open(args.sheet).convert("RGB")
+    sheet = Image.open(args.sheet)
+    has_alpha = "A" in sheet.getbands() and sheet.getchannel("A").getextrema()[0] < 250
+    sheet = sheet.convert("RGBA" if has_alpha else "RGB")
+    print("背景透過の画像です。元の透明度をそのまま使います" if has_alpha else "白背景の画像です。白を自動で抜きます")
     cw, ch = sheet.width / cols, sheet.height / rows
     count = cols * rows
     conf = read_config(args.config, count)

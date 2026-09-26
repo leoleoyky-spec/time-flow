@@ -52,3 +52,15 @@ def test_sheet_builds_valid_set(tmp_path):
     out = tmp_path / "out"
     assert st.main([str(_sheet(tmp_path)), "--grid", "4x2", "-o", str(out)]) == 0
     assert ms.validate_dir(out)
+
+
+def test_cut_cell_uses_existing_transparency():
+    cell = Image.new("RGBA", (200, 200), (0, 0, 0, 0))
+    d = ImageDraw.Draw(cell)
+    d.rectangle((60, 15, 140, 35), fill=(80, 50, 40, 255))
+    d.ellipse((40, 60, 160, 180), fill=(255, 255, 255, 255), outline=(80, 50, 40, 255), width=6)
+    text, char = st.cut_cell(cell)
+    assert text.getchannel("A").getpixel((100, 25)) == 255
+    assert char.getchannel("A").getpixel((100, 120)) == 255     # 白い顔はそのまま不透明
+    assert char.getchannel("A").getpixel((5, 195)) == 0
+    assert char.getchannel("A").getpixel((100, 50)) == 0 or char.getchannel("A").getpixel((100, 45)) == 0
