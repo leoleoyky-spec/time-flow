@@ -109,6 +109,14 @@
       <div id="partsPanel" class="parts-panel">
         <h3>一部分だけ動かす <small>（手をふる など）</small></h3>
         <p id="partsHint" class="hint"></p>
+        <div id="partWords">
+          <label for="partText" class="words-label">動かしたい部分と動きを言葉で</label>
+          <div class="words-row">
+            <input id="partText" type="text" placeholder="例：左手を大きく振って、右耳を上下に" enterkeyhint="done">
+            <button id="partApply" type="button" class="btn small">動かす</button>
+          </div>
+          <p id="partResult" class="hint" role="status"></p>
+        </div>
         <canvas id="partsCanvas" aria-label="動かす部分をなぞる場所"></canvas>
         <div class="row-buttons">
           <button id="partAdd" type="button" class="btn small">動かす部分をなぞる</button>

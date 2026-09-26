@@ -1,65 +1,11 @@
 // Moving one part of a picture (a hand, an ear) separately from the rest.
-// The user traces the part; we cut it out, fill the hole it leaves in the base
-// picture, and guess the joint it swings around. Works in the browser
-// (window.Parts) and in Node (module.exports) on raw RGBA pixels.
+// The user traces the part. Instead of cutting it out (which leaves the old hand
+// behind and a seam at the wrist), the picture is bent like rubber: a mesh laid
+// over it moves fully inside the traced outline and less and less just outside it,
+// so the wrist and the body next to it stretch along. Works in the browser
+// (window.Parts) and in Node (module.exports).
 (function (root) {
   'use strict';
-
-  /**
-   * Fill the masked pixels of `d` from their surroundings, layer by layer inward,
-   * so that when the part moves away there is body color behind it, not a hole.
-   * Transparent surroundings stay transparent (a hand sticking out over nothing).
-   * @param {Uint8ClampedArray|Uint8Array} d  RGBA pixels (modified)
-   * @param {Uint8Array} mask  1 = pixel to fill
-   */
-  function inpaint(d, w, h, mask) {
-    const n = w * h;
-    const known = new Uint8Array(n);
-    for (let i = 0; i < n; i++) known[i] = mask[i] ? 0 : 1;
-    let frontier = [];
-    const isFrontier = (i) => {
-      const x = i % w;
-      return (x > 0 && known[i - 1]) || (x < w - 1 && known[i + 1]) || (i >= w && known[i - w]) || (i < n - w && known[i + w]);
-    };
-    for (let i = 0; i < n; i++) if (!known[i] && isFrontier(i)) frontier.push(i);
-    while (frontier.length) {
-      const filled = [];
-      for (const i of frontier) {
-        const x = i % w;
-        let r = 0, g = 0, b = 0, a = 0, cnt = 0;
-        const add = (j) => {
-          if (!known[j]) return;
-          const o = j * 4;
-          const al = d[o + 3];
-          r += d[o] * al; g += d[o + 1] * al; b += d[o + 2] * al; a += al; cnt++;
-        };
-        if (x > 0) add(i - 1);
-        if (x < w - 1) add(i + 1);
-        if (i >= w) add(i - w);
-        if (i < n - w) add(i + w);
-        if (x > 0 && i >= w) add(i - w - 1);
-        if (x < w - 1 && i >= w) add(i - w + 1);
-        if (x > 0 && i < n - w) add(i + w - 1);
-        if (x < w - 1 && i < n - w) add(i + w + 1);
-        const o = i * 4;
-        if (a > 0) {
-          d[o] = r / a; d[o + 1] = g / a; d[o + 2] = b / a;
-        }
-        d[o + 3] = cnt ? a / cnt : 0;
-        filled.push(i);
-      }
-      for (const i of filled) known[i] = 1;
-      const next = [];
-      const seen = new Uint8Array(n);
-      for (const i of filled) {
-        const x = i % w;
-        for (const j of [x > 0 ? i - 1 : -1, x < w - 1 ? i + 1 : -1, i - w, i + w]) {
-          if (j >= 0 && j < n && !known[j] && !seen[j]) { seen[j] = 1; next.push(j); }
-        }
-      }
-      frontier = next;
-    }
-  }
 
   /**
    * Guess the joint a traced part swings around. Where the traced outline cuts
@@ -115,6 +61,127 @@
     return [best[0], best[1]];
   }
 
+  function pointInPoly(x, y, poly) {
+    let inside = false;
+    for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+      const [xi, yi] = poly[i];
+      const [xj, yj] = poly[j];
+      if (yi > y !== yj > y && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi) inside = !inside;
+    }
+    return inside;
+  }
+
+  function distToPoly(x, y, poly) {
+    let best = Infinity;
+    for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+      const [ax, ay] = poly[j];
+      const [bx, by] = poly[i];
+      const dx = bx - ax;
+      const dy = by - ay;
+      const len2 = dx * dx + dy * dy || 1;
+      const t = Math.max(0, Math.min(1, ((x - ax) * dx + (y - ay) * dy) / len2));
+      best = Math.min(best, Math.hypot(x - ax - t * dx, y - ay - t * dy));
+    }
+    return best;
+  }
+
+  /**
+   * How much a point follows the part: 1 inside the traced outline, easing to 0
+   * at `falloff` pixels outside it. `poly` is in pixels.
+   */
+  function partWeight(x, y, poly, falloff) {
+    if (pointInPoly(x, y, poly)) return 1;
+    const d = distToPoly(x, y, poly);
+    if (d >= falloff) return 0;
+    const t = 1 - d / falloff;
+    return t * t * (3 - 2 * t);
+  }
+
+  function shakeWave(phase) {
+    return Math.sin(phase) * 0.6 + Math.sin(phase * 2.7 + 1) * 0.3 + Math.sin(phase * 5.3 + 2) * 0.1;
+  }
+
+  /**
+   * A part's motion at time t (0–1): rotation in radians around its joint, and a
+   * shift as a fraction of the picture's height.
+   */
+  function partTransform(cfg, t) {
+    const amount = (cfg.amount || 0) / 100;
+    const phase = t * Math.PI * 2 * (cfg.speed || 1);
+    if (cfg.type === 'updown') return { rot: 0, dx: 0, dy: -Math.abs(Math.sin(phase)) * amount * 0.12 };
+    if (cfg.type === 'side') return { rot: 0, dx: Math.sin(phase) * amount * 0.1, dy: 0 };
+    if (cfg.type === 'shake') return { rot: shakeWave(phase * 3) * amount * 0.15, dx: 0, dy: 0 };
+    return { rot: Math.sin(phase) * amount * 0.6, dx: 0, dy: 0 }; // wave: up to about ±35°
+  }
+
+  /**
+   * Lay a grid over a w×h picture and work out how strongly each grid point follows
+   * each part. Only cells touched by some part need to be bent when drawing.
+   * @param {{poly:number[][], pivot:number[]}[]} parts  in 0–1 picture coordinates
+   */
+  function buildMesh(w, h, parts, opts = {}) {
+    const cell = Math.max(w, h) / (opts.cells || 32);
+    const cols = Math.ceil(w / cell);
+    const rows = Math.ceil(h / cell);
+    const falloff = (opts.falloff || 0.1) * Math.max(w, h);
+    const xs = new Float32Array((cols + 1) * (rows + 1));
+    const ys = new Float32Array((cols + 1) * (rows + 1));
+    for (let j = 0; j <= rows; j++) {
+      for (let i = 0; i <= cols; i++) {
+        xs[j * (cols + 1) + i] = Math.min(i * cell, w);
+        ys[j * (cols + 1) + i] = Math.min(j * cell, h);
+      }
+    }
+    const weights = parts.map((p) => {
+      const poly = p.poly.map(([x, y]) => [x * w, y * h]);
+      const pxs = poly.map((q) => q[0]);
+      const pys = poly.map((q) => q[1]);
+      const size = Math.max(Math.max(...pxs) - Math.min(...pxs), Math.max(...pys) - Math.min(...pys)) || 1;
+      const jx = p.pivot[0] * w;
+      const jy = p.pivot[1] * h;
+      const out = new Float32Array(xs.length);
+      for (let k = 0; k < xs.length; k++) {
+        // Stretch generously around the joint (the wrist bends), but only a little
+        // near the far end, so drawings next to the fingertips aren't dragged along.
+        const near = Math.max(0.25, 1 - Math.hypot(xs[k] - jx, ys[k] - jy) / size);
+        out[k] = partWeight(xs[k], ys[k], poly, falloff * near);
+      }
+      return out;
+    });
+    const cells = [];
+    for (let j = 0; j < rows; j++) {
+      for (let i = 0; i < cols; i++) {
+        const v = [j * (cols + 1) + i, j * (cols + 1) + i + 1, (j + 1) * (cols + 1) + i, (j + 1) * (cols + 1) + i + 1];
+        if (weights.some((wt) => v.some((k) => wt[k] > 0))) cells.push(i, j);
+      }
+    }
+    return { w, h, cols, rows, cell, xs, ys, weights, cells };
+  }
+
+  /**
+   * Where grid point k ends up at time t. Each part rotates/shifts the point around
+   * its joint in proportion to the point's weight; the moves of several parts add up.
+   */
+  function deformVertex(mesh, k, parts, t) {
+    const x = mesh.xs[k];
+    const y = mesh.ys[k];
+    let nx = x;
+    let ny = y;
+    parts.forEach((p, n) => {
+      const wt = mesh.weights[n][k];
+      if (!wt) return;
+      const tr = partTransform(p.cfg, t);
+      const px = p.pivot[0] * mesh.w;
+      const py = p.pivot[1] * mesh.h;
+      const a = tr.rot * wt;
+      const c = Math.cos(a);
+      const s = Math.sin(a);
+      nx += px + (x - px) * c - (y - py) * s - x + tr.dx * wt * mesh.h;
+      ny += py + (x - px) * s + (y - py) * c - y + tr.dy * wt * mesh.h;
+    });
+    return [nx, ny];
+  }
+
   const PART_MOTIONS = {
     wave: { label: '手をふる（左右にふる）' },
     updown: { label: '上下にうごく' },
@@ -122,7 +189,7 @@
     shake: { label: 'ぶるぶる' },
   };
 
-  const api = { inpaint, guessPivot, PART_MOTIONS };
+  const api = { guessPivot, partWeight, partTransform, buildMesh, deformVertex, PART_MOTIONS };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.Parts = api;
 })(typeof window !== 'undefined' ? window : globalThis);

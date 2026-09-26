@@ -116,14 +116,65 @@
     shake: { label: 'ぶるぶる' },
   };
 
-  // How one traced part (a hand, an ear) moves around its joint.
-  function partMotion(cfg, t, size) {
-    const amount = (cfg.amount || 0) / 100;
-    const phase = t * TAU * (cfg.speed || 1);
-    if (cfg.type === 'updown') return { dx: 0, dy: -Math.abs(Math.sin(phase)) * amount * size * 0.12, rot: 0 };
-    if (cfg.type === 'side') return { dx: Math.sin(phase) * amount * size * 0.1, dy: 0, rot: 0 };
-    if (cfg.type === 'shake') return { dx: 0, dy: 0, rot: waveShape('shake', phase * 3) * amount * 0.15 };
-    return { dx: 0, dy: 0, rot: Math.sin(phase) * amount * 0.6 }; // wave: up to about ±35°
+  // Draw each bent grid cell as two textured triangles. Grid points are moved by
+  // Parts.deformVertex; `k` scales picture pixels to the current drawing size.
+  function drawBentCells(ctx, layers, t, x0, y0, k) {
+    const { mesh, parts, img } = layers;
+    const moved = new Map();
+    const at = (idx) => {
+      let v = moved.get(idx);
+      if (!v) {
+        const [x, y] = root.Parts.deformVertex(mesh, idx, parts, t);
+        v = [x0 + x * k, y0 + y * k];
+        moved.set(idx, v);
+      }
+      return v;
+    };
+    const src = (idx) => [mesh.xs[idx], mesh.ys[idx]];
+    const row = mesh.cols + 1;
+    for (let c = 0; c < mesh.cells.length; c += 2) {
+      const i = mesh.cells[c];
+      const j = mesh.cells[c + 1];
+      const a = j * row + i;
+      const b = a + 1;
+      const d = a + row;
+      const e = d + 1;
+      texturedTriangle(ctx, img, [src(a), src(b), src(e)], [at(a), at(b), at(e)]);
+      texturedTriangle(ctx, img, [src(a), src(e), src(d)], [at(a), at(e), at(d)]);
+    }
+  }
+
+  // Map the picture's triangle s onto the screen triangle d (an affine transform),
+  // clipped to d grown by half a pixel so neighbouring triangles leave no hairline gaps.
+  function texturedTriangle(ctx, img, s, d) {
+    const [[s0x, s0y], [s1x, s1y], [s2x, s2y]] = s;
+    const [[d0x, d0y], [d1x, d1y], [d2x, d2y]] = d;
+    const den = s0x * (s1y - s2y) + s1x * (s2y - s0y) + s2x * (s0y - s1y);
+    if (!den) return;
+    const a = (d0x * (s1y - s2y) + d1x * (s2y - s0y) + d2x * (s0y - s1y)) / den;
+    const b = (d0y * (s1y - s2y) + d1y * (s2y - s0y) + d2y * (s0y - s1y)) / den;
+    const c = (d0x * (s2x - s1x) + d1x * (s0x - s2x) + d2x * (s1x - s0x)) / den;
+    const dd = (d0y * (s2x - s1x) + d1y * (s0x - s2x) + d2y * (s1x - s0x)) / den;
+    const e = (d0x * (s1x * s2y - s2x * s1y) + d1x * (s2x * s0y - s0x * s2y) + d2x * (s0x * s1y - s1x * s0y)) / den;
+    const f = (d0y * (s1x * s2y - s2x * s1y) + d1y * (s2x * s0y - s0x * s2y) + d2y * (s0x * s1y - s1x * s0y)) / den;
+    const cx = (d0x + d1x + d2x) / 3;
+    const cy = (d0y + d1y + d2y) / 3;
+    const grow = (x, y) => {
+      const l = Math.hypot(x - cx, y - cy) || 1;
+      return [x + ((x - cx) / l) * 0.6, y + ((y - cy) / l) * 0.6];
+    };
+    ctx.save();
+    ctx.beginPath();
+    for (const [x, y] of [d[0], d[1], d[2]].map(([x, y]) => grow(x, y))) ctx.lineTo(x, y);
+    ctx.closePath();
+    ctx.clip();
+    ctx.transform(a, b, c, dd, e, f);
+    const minX = Math.max(0, Math.floor(Math.min(s0x, s1x, s2x)) - 1);
+    const minY = Math.max(0, Math.floor(Math.min(s0y, s1y, s2y)) - 1);
+    const maxX = Math.min(img.width, Math.ceil(Math.max(s0x, s1x, s2x)) + 1);
+    const maxY = Math.min(img.height, Math.ceil(Math.max(s0y, s1y, s2y)) + 1);
+    if (maxX > minX && maxY > minY) ctx.drawImage(img, minX, minY, maxX - minX, maxY - minY, minX, minY, maxX - minX, maxY - minY);
+    ctx.restore();
   }
 
   const CUSTOM_PATHS = {
@@ -224,8 +275,8 @@
    * @param {object} sticker
    * @param {number} t  0 <= t < 1
    * @param {HTMLImageElement|null} img  decoded sticker.image
-   * @param {{base: CanvasImageSource, parts: {canvas, pivot: number[], cfg}[]}|null} [layers]
-   *   when some parts of the picture move on their own (see js/parts.js)
+   * @param {{img, base, mesh, parts}|null} [layers]  when some parts of the picture
+   *   move on their own: `base` is the picture without the bent cells (see js/parts.js)
    */
   function drawFrame(ctx, sticker, t, W, H, img, layers) {
     ctx.clearRect(0, 0, W, H);
@@ -263,19 +314,9 @@
       const x0 = -iw / 2;
       const y0 = y + (imgBoxH - ih) / 2;
       if (layers) {
-        // The body with the parts cut out, then each part moving around its joint.
+        // Everything the parts don't touch, then the touched cells bent like rubber.
         ctx.drawImage(layers.base, x0, y0, iw, ih);
-        for (const part of layers.parts) {
-          const m = partMotion(part.cfg, t, ih);
-          const px = x0 + part.pivot[0] * iw;
-          const py = y0 + part.pivot[1] * ih;
-          ctx.save();
-          ctx.translate(px + m.dx, py + m.dy);
-          ctx.rotate(m.rot);
-          ctx.translate(-px, -py);
-          ctx.drawImage(part.canvas, x0, y0, iw, ih);
-          ctx.restore();
-        }
+        drawBentCells(ctx, layers, t, x0, y0, iw / layers.mesh.w);
       } else {
         ctx.drawImage(img, x0, y0, iw, ih);
       }

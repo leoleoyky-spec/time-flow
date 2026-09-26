@@ -3,9 +3,9 @@
 
   const { FONTS, MOTIONS, EFFECTS, CUSTOM_WAVES, CUSTOM_PATHS, defaultSticker, drawFrame } = window.Stickers;
   const { assembleAPNG, quantize, encodeIndexedPNG, createZip } = window.Encoder;
-  const { parseMotionText, parseInstruction, parsePartRequest, EXAMPLES: MOTION_EXAMPLES, WISH_EXAMPLES } = window.MotionWords;
+  const { parseMotionText, parseInstruction, parsePartRequests, parsePartMotion, EXAMPLES: MOTION_EXAMPLES, WISH_EXAMPLES } = window.MotionWords;
   const { removeBackgroundPixels } = window.BgRemove;
-  const { inpaint, guessPivot, PART_MOTIONS } = window.Parts;
+  const { guessPivot, buildMesh, PART_MOTIONS } = window.Parts;
 
   const W = 320;
   const H = 270;
@@ -136,21 +136,38 @@
   }
 
   // ---------- moving parts ----------
-  // Cut-out canvases depend only on the picture and the traced outlines, so they are
-  // cached on that; the joint and the motion settings are read live every frame.
+  // The bend grid depends on the picture, the traced outlines and the joints, so it
+  // is cached on those; the motion settings are read live every frame.
   const layerCache = new Map();
   function getLayers(st) {
     if (!st.parts || !st.parts.length) return null;
     const img = getImage(st.image);
     if (!img) return null;
-    const key = st.image.length + ':' + st.image.slice(-64) + ':' + JSON.stringify(st.parts.map((p) => p.poly));
+    const key = st.image.length + ':' + st.image.slice(-64) + ':' + JSON.stringify(st.parts.map((p) => [p.poly, p.pivot]));
     let built = layerCache.get(key);
     if (!built) {
       built = buildLayers(img, st.parts);
       if (layerCache.size > 30) layerCache.clear();
       layerCache.set(key, built);
     }
-    return { base: built.base, parts: st.parts.map((p, i) => ({ canvas: built.canvases[i], pivot: p.pivot, cfg: p.cfg })) };
+    return { img, base: built.base, mesh: built.mesh, parts: st.parts };
+  }
+
+  // The base is the picture with the cells that will be bent cleared out,
+  // so the unbent copy of the hand never shows behind the moving one.
+  function buildLayers(img, parts) {
+    const w = img.naturalWidth || img.width;
+    const h = img.naturalHeight || img.height;
+    const mesh = buildMesh(w, h, parts);
+    const base = document.createElement('canvas');
+    base.width = w;
+    base.height = h;
+    const ctx = base.getContext('2d');
+    ctx.drawImage(img, 0, 0);
+    for (let c = 0; c < mesh.cells.length; c += 2) {
+      ctx.clearRect(mesh.cells[c] * mesh.cell, mesh.cells[c + 1] * mesh.cell, mesh.cell, mesh.cell);
+    }
+    return { base, mesh };
   }
 
   function partMask(poly, w, h) {
@@ -168,41 +185,9 @@
     return mask;
   }
 
-  function buildLayers(img, parts) {
-    const w = img.naturalWidth || img.width;
-    const h = img.naturalHeight || img.height;
-    const src = document.createElement('canvas');
-    src.width = w;
-    src.height = h;
-    const sctx = src.getContext('2d', { willReadFrequently: true });
-    sctx.drawImage(img, 0, 0);
-    const pixels = sctx.getImageData(0, 0, w, h);
-    const union = new Uint8Array(w * h);
-    const canvases = parts.map((part) => {
-      const mask = partMask(part.poly, w, h);
-      const out = new ImageData(w, h);
-      for (let i = 0; i < w * h; i++) {
-        if (!mask[i]) continue;
-        union[i] = 1;
-        out.data.set(pixels.data.subarray(i * 4, i * 4 + 4), i * 4);
-      }
-      const c = document.createElement('canvas');
-      c.width = w;
-      c.height = h;
-      c.getContext('2d').putImageData(out, 0, 0);
-      return c;
-    });
-    inpaint(pixels.data, w, h, union);
-    const base = document.createElement('canvas');
-    base.width = w;
-    base.height = h;
-    base.getContext('2d').putImageData(pixels, 0, 0);
-    return { base, canvases };
-  }
-
   let partSel = 0;
   let partMode = 'idle'; // 'idle' | 'draw'
-  let pendingPart = null; // a worded request ("左手だけ振る") waiting for the user to trace the part
+  let pendingParts = []; // worded requests ("左手を振って、右耳を上下に") waiting for the user to trace each part
   let stroke = null;
 
   function partsCanvasRect() {
@@ -260,12 +245,14 @@
     const parts = st.parts;
     partSel = Math.min(partSel, Math.max(0, parts.length - 1));
     $('partsCanvas').hidden = !hasImg;
+    $('partWords').hidden = !hasImg;
     $('partAdd').disabled = !hasImg || parts.length >= 3;
     $('partAdd').textContent = partMode === 'draw' ? 'なぞるのをやめる' : parts.length ? 'もう1つ部分を追加' : '動かす部分をなぞる';
     if (partMode === 'draw') $('partAdd').disabled = false;
     $('partRemove').hidden = !parts.length;
     let hint;
     if (!hasImg) hint = '先に「画像を選ぶ」で画像を入れてね';
+    else if (partMode === 'draw' && pendingParts.length) hint = `「${pendingParts[0].name}」を、指やマウスでぐるっと囲んでね`;
     else if (partMode === 'draw') hint = '動かしたい部分（左手など）を、指やマウスでぐるっと囲んでね';
     else if (!parts.length) hint = '「動かす部分をなぞる」を押して、動かしたい部分を囲むと、そこだけ動かせます';
     else hint = '赤い点が動きの中心（つけ根）です。ちがう場所をタップすると移せます';
@@ -273,12 +260,12 @@
 
     const tabs = $('partTabs');
     tabs.innerHTML = '';
-    if (parts.length > 1) {
+    if (parts.length) {
       parts.forEach((p, i) => {
         const b = document.createElement('button');
         b.type = 'button';
         b.className = 'chip';
-        b.textContent = `部分${i + 1}`;
+        b.textContent = p.name || `部分${i + 1}`;
         b.setAttribute('role', 'radio');
         b.setAttribute('aria-checked', String(i === partSel));
         b.addEventListener('click', () => {
@@ -316,37 +303,86 @@
     const ctx = c.getContext('2d', { willReadFrequently: true });
     ctx.drawImage(img, 0, 0);
     const pivot = guessPivot(simple, ctx.getImageData(0, 0, w, h).data, w, h, partMask(simple, w, h));
-    const cfg = pendingPart ? { ...pendingPart.cfg } : { type: 'wave', amount: 50, speed: 2 };
-    st.parts.push({ poly: simple, pivot, cfg });
+    const req = pendingParts.shift();
+    const cfg = req ? { ...req.cfg } : { type: 'wave', amount: 50, speed: 2 };
+    st.parts.push({ name: req ? req.name : `部分${st.parts.length + 1}`, poly: simple, pivot, cfg });
     partSel = st.parts.length - 1;
-    if (pendingPart) {
-      if (pendingPart.only) st.motion = 'none';
-      setStatus(`「${pendingPart.name}」を${PART_MOTIONS[cfg.type].label.replace(/（.*）/, '')}ように設定しました`);
-      pendingPart = null;
+    if (req) {
+      if (req.only) st.motion = 'none';
+      setStatus(`「${req.name}」を設定しました：${req.understood.slice(1).join('・')}`);
     }
     return true;
   }
 
-  // Apply "左手だけ左右に振る" style words. Returns a message, or null if the text isn't about a part.
+  // Apply "左手だけ左右に振る" / "左手を振って、右耳を上下に" style words. Parts that are
+  // already traced (matched by name) are updated; new ones are queued for tracing.
+  // Returns a message, or null if the text names no body part.
   function applyPartWords(text) {
-    const req = parsePartRequest(text);
-    if (!req) return null;
+    const reqs = parsePartRequests(text);
+    if (!reqs.length) return null;
     const st = current();
-    if (!st.image) return `先に「画像を選ぶ」で画像を入れてね。そのあと${req.name}を囲むと、そこだけ動かせます`;
-    if (st.parts.length) {
-      Object.assign(st.parts[partSel].cfg, req.cfg);
-      if (req.only) st.motion = 'none';
-      changed();
-      return '読みとった内容：' + req.understood.join('・') + `（部分${partSel + 1}に設定）`;
+    const names = reqs.map((r) => r.name).join('・');
+    if (!st.image) return `先に「画像を選ぶ」で画像を入れてね。そのあと${names}を囲むと、そこだけ動かせます`;
+    const done = [];
+    const queue = [];
+    for (const req of reqs) {
+      const i = st.parts.findIndex((p) => p.name === req.name);
+      // With a single untitled part, "左手を…" most likely means that part.
+      const j = i >= 0 ? i : st.parts.length === 1 && /^部分\d$/.test(st.parts[0].name || '部分1') && !queue.length && !done.length ? 0 : -1;
+      if (j >= 0) {
+        Object.assign(st.parts[j].cfg, req.cfg);
+        st.parts[j].name = req.name;
+        if (req.only) st.motion = 'none';
+        partSel = j;
+        done.push(req.understood.join('・'));
+      } else if (st.parts.length + queue.length < 3) {
+        queue.push(req);
+      }
     }
-    pendingPart = req;
-    showTab('image');
-    partMode = 'draw';
-    stroke = null;
-    syncParts();
-    $('partsPanel').scrollIntoView({ behavior: 'smooth', block: 'center' });
-    return `${req.name}がどこにあるか、まだわからないよ。「画像」タブの「一部分だけ動かす」で、${req.name}を指でぐるっと囲んでね。囲むとすぐ動きます`;
+    changed();
+    let msg = done.length ? '読みとった内容：' + done.join(' / ') : '';
+    if (queue.length) {
+      pendingParts = queue;
+      showTab('image');
+      partMode = 'draw';
+      stroke = null;
+      syncParts();
+      $('partsPanel').scrollIntoView({ behavior: 'smooth', block: 'center' });
+      const qn = queue.map((r) => r.name).join('、');
+      msg += (msg ? '。' : '') + `${qn}がどこにあるか、まだわからないよ。「画像」タブの絵で、${queue[0].name}を指でぐるっと囲んでね` + (queue.length > 1 ? '（囲むと次の部分の案内が出ます）' : '。囲むとすぐ動きます');
+    }
+    return msg;
   }
+
+  // The parts panel's own word box: a body part name works like above; otherwise the
+  // words set the selected part's motion, or start tracing a new part when none exists.
+  function applyPartBox() {
+    const text = $('partText').value;
+    const msg = applyPartWords(text);
+    if (msg !== null) {
+      $('partResult').textContent = msg;
+      return;
+    }
+    const m = parsePartMotion(text);
+    if (!m) {
+      $('partResult').textContent = text.trim()
+        ? 'ごめんね、動きの言葉が見つからなかったよ。例：「左手を大きく振る」「ゆっくり上下に」'
+        : '動かしたい部分と動きを書いてね';
+      return;
+    }
+    const st = current();
+    if (!st.parts.length) {
+      pendingParts = [{ name: '部分1', only: false, cfg: m.cfg, understood: ['部分1', ...m.understood] }];
+      partMode = 'draw';
+      syncParts();
+      $('partResult').textContent = '動かしたい部分を、絵の上で指でぐるっと囲んでね';
+      return;
+    }
+    Object.assign(st.parts[partSel].cfg, m.cfg);
+    changed();
+    $('partResult').textContent = `「${st.parts[partSel].name || '部分' + (partSel + 1)}」を設定しました：` + m.understood.join('・');
+  }
+
 
   // ---------- rendering ----------
   function stillT(st) {
@@ -628,9 +664,13 @@
     });
     $('partAdd').addEventListener('click', () => {
       partMode = partMode === 'draw' ? 'idle' : 'draw';
-      if (partMode === 'idle') pendingPart = null;
+      if (partMode === 'idle') pendingParts = [];
       stroke = null;
       syncParts();
+    });
+    $('partApply').addEventListener('click', applyPartBox);
+    $('partText').addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && !e.isComposing) applyPartBox();
     });
     $('partRemove').addEventListener('click', () => {
       current().parts.splice(partSel, 1);
@@ -663,7 +703,7 @@
       if (partMode === 'draw' && stroke) {
         const ok = addPartFromStroke(stroke);
         stroke = null;
-        if (ok) partMode = 'idle';
+        if (ok && !pendingParts.length) partMode = 'idle';
         else setStatus('もう少し大きく、ぐるっと一周囲んでね');
         changed();
       } else if (downAt && current().parts.length && Math.hypot(at[0] - downAt[0], at[1] - downAt[1]) < 0.03) {
@@ -852,7 +892,7 @@
     state.selected = i;
     partSel = 0;
     partMode = 'idle';
-    pendingPart = null;
+    pendingParts = [];
     stroke = null;
     $('customResult').textContent = '';
     $('wishResult').textContent = '';

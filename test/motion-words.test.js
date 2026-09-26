@@ -124,3 +124,21 @@ test('no body part means no part request (大きく跳ねる stays a whole-body 
   assert.strictEqual(parsePartRequest('大きく跳ねる'), null);
   assert.strictEqual(parsePartRequest('ぴょんぴょん跳ねる'), null);
 });
+
+const { parsePartRequests, parsePartMotion } = require('../js/motion-words.js');
+
+test('several parts in one sentence', () => {
+  const r = parsePartRequests('左手を大きく振って、右耳を上下にぴょこぴょこ');
+  assert.deepStrictEqual(r.map((x) => x.name), ['左手', '右耳']);
+  assert.strictEqual(r[0].cfg.type, 'wave');
+  assert.strictEqual(r[0].cfg.amount, 80);
+  assert.strictEqual(r[1].cfg.type, 'updown');
+});
+
+test('parsePartMotion reads a motion without a body part', () => {
+  const r = parsePartMotion('ゆっくり小さく振る');
+  assert.strictEqual(r.cfg.type, 'wave');
+  assert.strictEqual(r.cfg.speed, 1);
+  assert.strictEqual(r.cfg.amount, 25);
+  assert.strictEqual(parsePartMotion('こんにちは'), null);
+});

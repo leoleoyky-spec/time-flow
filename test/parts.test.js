@@ -1,37 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert');
-const { inpaint, guessPivot } = require('../js/parts.js');
-
-function solid(w, h, rgba) {
-  const d = new Uint8Array(w * h * 4);
-  for (let i = 0; i < w * h; i++) d.set(rgba, i * 4);
-  return d;
-}
-
-test('inpaint fills a hole in a white body with white', () => {
-  const w = 40, h = 40;
-  const d = solid(w, h, [255, 255, 255, 255]);
-  const mask = new Uint8Array(w * h);
-  for (let y = 15; y < 25; y++) for (let x = 15; x < 25; x++) {
-    mask[y * w + x] = 1;
-    d.set([60, 40, 20, 255], (y * w + x) * 4); // the brown "hand" being cut out
-  }
-  inpaint(d, w, h, mask);
-  const c = (20 * w + 20) * 4;
-  assert.deepStrictEqual(Array.from(d.slice(c, c + 4)).map(Math.round), [255, 255, 255, 255]);
-});
-
-test('inpaint keeps a hole over transparent surroundings transparent', () => {
-  const w = 20, h = 20;
-  const d = new Uint8Array(w * h * 4); // fully transparent
-  const mask = new Uint8Array(w * h);
-  for (let y = 5; y < 15; y++) for (let x = 5; x < 15; x++) {
-    mask[y * w + x] = 1;
-    d.set([60, 40, 20, 255], (y * w + x) * 4);
-  }
-  inpaint(d, w, h, mask);
-  assert.strictEqual(d[(10 * w + 10) * 4 + 3], 0);
-});
+const { guessPivot, partWeight, buildMesh, deformVertex } = require('../js/parts.js');
 
 test('guessPivot picks the traced point nearest the body', () => {
   // Body on the left half; the traced "hand" sticks out on the right.
@@ -56,4 +25,28 @@ test('guessPivot finds the wrist of a raised hand, not its top', () => {
   for (let y = 16; y < 64; y++) for (let x = 52; x < 73; x++) mask[y * w + x] = 1;
   const [, py] = guessPivot(poly, d, w, h, mask);
   assert.ok(py > 0.55, `pivot y ${py} should be at the bottom (wrist), not the top`);
+});
+
+test('partWeight: 1 inside the outline, easing to 0 outside', () => {
+  const sq = [[10, 10], [20, 10], [20, 20], [10, 20]];
+  assert.strictEqual(partWeight(15, 15, sq, 10), 1);
+  const near = partWeight(22, 15, sq, 10);
+  assert.ok(near > 0 && near < 1);
+  assert.strictEqual(partWeight(40, 15, sq, 10), 0);
+});
+
+test('bending moves the part, leaves far pixels alone, and keeps the joint fixed', () => {
+  // A "hand" square on the right; joint at its left edge.
+  const parts = [{ poly: [[0.6, 0.4], [0.8, 0.4], [0.8, 0.6], [0.6, 0.6]], pivot: [0.6, 0.5], cfg: { type: 'wave', amount: 100, speed: 1 } }];
+  const mesh = buildMesh(100, 100, parts, { cells: 20, falloff: 0.1 });
+  const at = (x, y) => (y / mesh.cell) * (mesh.cols + 1) + x / mesh.cell;
+  const t = 0.25; // peak of the swing
+  const hand = deformVertex(mesh, at(75, 50), parts, t);
+  assert.ok(Math.hypot(hand[0] - 75, hand[1] - 50) > 5, 'the hand should move');
+  const far = deformVertex(mesh, at(10, 10), parts, t);
+  assert.deepStrictEqual(far, [10, 10]);
+  const joint = deformVertex(mesh, at(60, 50), parts, t);
+  assert.ok(Math.hypot(joint[0] - 60, joint[1] - 50) < 0.001, 'the joint should stay put');
+  // Only cells near the part are bent.
+  assert.ok(mesh.cells.length / 2 < mesh.cols * mesh.rows / 2);
 });

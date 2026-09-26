@@ -262,41 +262,63 @@
     '頭', 'あたま', '顔', '足', 'あし', '羽', 'はね', 'ほっぺ', '目', 'リボン', '帽子', 'マグカップ', 'カップ'];
 
   /**
-   * Detect a request to move one part of the picture.
-   * @returns {null | {name: string, only: boolean, cfg: {type, amount, speed}, understood: string[]}}
-   *   `only` is true for "…だけ", meaning the rest of the picture should stay still.
+   * Read how one part should move, e.g. "大きく速く振る" (no body part needed).
+   * @returns {null | {cfg: {type, amount, speed}, understood: string[]}}
    */
-  function parsePartRequest(text) {
+  function parsePartMotion(text) {
     const t = String(text || '');
-    const name = BODY_PARTS.find((p) => t.includes(p));
-    if (!name) return null;
-    // "羽" / "はね" are parts, but "はね" is also 跳ね(る); only treat it as a part when followed by を/が/だけ/の.
-    if ((name === 'はね') && !/はね(を|が|だけ|の)/.test(t)) return null;
-    const rest = t.split(name).join(' ');
-    const only = /だけ|のみ|以外は?(動かさない|止め)/.test(rest);
-
-    let type = 'wave';
-    let label = 'ふる';
-    if (/上下|ぴょこ|ピョコ|跳ね|はね|うなず/.test(rest)) { type = 'updown'; label = '上下にうごく'; }
-    else if (/震|ぶるぶる|ブルブル|ぷるぷる|プルプル/.test(rest)) { type = 'shake'; label = 'ぶるぶる'; }
-    else if (/横に|スライド|左右にうごく|左右に動く/.test(rest)) { type = 'side'; label = '左右にうごく'; }
-    else if (/振|ふる|ふっ|フリフリ|バイバイ|左右|パタパタ|ぱたぱた|ゆら|揺/.test(rest)) { type = 'wave'; label = 'ふる'; }
+    let type = null;
+    let label = '';
+    if (/上下|ぴょこ|ピョコ|跳ね|はね|うなず/.test(t)) { type = 'updown'; label = '上下にうごく'; }
+    else if (/震|ぶるぶる|ブルブル|ぷるぷる|プルプル/.test(t)) { type = 'shake'; label = 'ぶるぶる'; }
+    else if (/横に|スライド|左右にうごく|左右に動く/.test(t)) { type = 'side'; label = '左右にうごく'; }
+    else if (/振|ふる|ふっ|フリフリ|バイバイ|左右|パタパタ|ぱたぱた|ゆら|揺|動/.test(t)) { type = 'wave'; label = 'ふる'; }
 
     let amount = 50;
     let speed = 2;
-    const understood = [name + (only ? 'だけ' : ''), label];
-    if (has(rest, ['大きく', 'おおきく', '思いっきり', '激し'])) { amount = 80; understood.push('大きく'); }
-    if (has(rest, ['少し', 'ちょっと', '小さく', '軽く'])) { amount = 25; understood.push('少しだけ'); }
-    if (has(rest, ['速', '早く', 'はやく'])) { speed = 3; understood.push('速く'); }
-    if (has(rest, ['ゆっくり', 'のんびり'])) { speed = 1; understood.push('ゆっくり'); }
-    const times = rest.match(/([1-4１-４一二三四])\s*(回|かい|度)/);
+    const understood = label ? [label] : [];
+    if (has(t, ['大きく', 'おおきく', '思いっきり', '激し'])) { amount = 80; understood.push('大きく'); }
+    if (has(t, ['少し', 'ちょっと', '小さく', '軽く', 'そっと'])) { amount = 25; understood.push('少しだけ'); }
+    if (has(t, ['速', '早く', 'はやく'])) { speed = 3; understood.push('速く'); }
+    if (has(t, ['ゆっくり', 'のんびり'])) { speed = 1; understood.push('ゆっくり'); }
+    const times = t.match(/([1-4１-４一二三四])\s*(回|かい|度)/);
     if (times) { speed = DIGITS[times[1]] || Number(times[1]); understood.push(`${speed}回`); }
-    return { name, only, cfg: { type, amount, speed }, understood };
+    if (!understood.length) return null;
+    return { cfg: { type: type || 'wave', amount, speed }, understood };
+  }
+
+  /**
+   * Detect requests to move parts of the picture: "左手だけ振る", or several at once,
+   * "左手を振って、右耳を上下に". Each body part word starts a new request.
+   * @returns {{name: string, only: boolean, cfg: {type, amount, speed}, understood: string[]}[]}
+   *   `only` is true for "…だけ", meaning the rest of the picture should stay still.
+   */
+  function parsePartRequests(text) {
+    const t = String(text || '');
+    const hits = [];
+    for (let i = 0; i < t.length; i++) {
+      const name = BODY_PARTS.find((p) => t.startsWith(p, i));
+      if (!name) continue;
+      // "はね" is also 跳ね(る); only a part when followed by を/が/だけ/の.
+      if (name === 'はね' && !/^はね(を|が|だけ|の)/.test(t.slice(i))) continue;
+      hits.push([i, name]);
+      i += name.length - 1;
+    }
+    const only = /だけ|のみ|以外は?(動かさない|止め)/.test(t);
+    return hits.map(([at, name], n) => {
+      const seg = t.slice(at + name.length, n + 1 < hits.length ? hits[n + 1][0] : t.length);
+      const m = parsePartMotion(seg) || { cfg: { type: 'wave', amount: 50, speed: 2 }, understood: ['ふる'] };
+      return { name, only, cfg: m.cfg, understood: [name + (only ? 'だけ' : ''), ...m.understood] };
+    });
+  }
+
+  function parsePartRequest(text) {
+    return parsePartRequests(text)[0] || null;
   }
 
   const EXAMPLES = ['大きく跳ねる', 'ゆっくり左右にゆれる', '速くぶるぶる震える', 'ドキドキ大きくなる', 'くるくる回る', 'ぺこりとおじぎ', 'ふわふわ浮かぶ', '手を振る'];
 
-  const api = { parseMotionText, parseInstruction, parsePartRequest, EXAMPLES, WISH_EXAMPLES };
+  const api = { parseMotionText, parseInstruction, parsePartRequest, parsePartRequests, parsePartMotion, EXAMPLES, WISH_EXAMPLES };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.MotionWords = api;
 })(typeof window !== 'undefined' ? window : globalThis);

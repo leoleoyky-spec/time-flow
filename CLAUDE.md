@@ -17,7 +17,7 @@ time-flow/
 ├── js/animations.js     # Sticker drawing: motions, effects, text layout
 ├── js/motion-words.js   # Japanese text → motion sliders / whole-sticker settings (browser + Node)
 ├── js/bg-remove.js      # Background removal on raw RGBA pixels (browser + Node)
-├── js/parts.js         # Moving one traced part: hole filling, joint guess (browser + Node)
+├── js/parts.js          # Moving one traced part: rubber-like bend mesh, joint guess (browser + Node)
 ├── js/app.js            # UI state, preview, export, localStorage persistence
 ├── test/                # node:test unit tests for the browser+Node modules
 └── package.json         # npm scripts (no dependencies)
@@ -43,11 +43,13 @@ Two features worth knowing about when touching `js/app.js` or `js/animations.js`
   quoted sticker text, colors (assigned to the nearest noun: 文字/フチ/effect), effect, font, size
   and timing from one sentence. Both are deliberately keyword-based (no AI call) so the app stays
   free and offline for whoever it's shared with.
-- **Moving one part** ("左手だけ振る"): the user traces the part on the picture (`sticker.parts`,
-  outline and joint in 0–1 image coords). `buildLayers()` in `js/app.js` cuts each part out and
-  fills the hole with `inpaint()` from `js/parts.js`; `drawFrame()` then draws the base and rotates
-  or shifts each part around its joint. The app can't find a hand by itself (that would need AI
-  image recognition), so a worded part request with no traced part asks the user to trace it.
+- **Moving one part** ("左手だけ振る"): the user traces the part on the picture (`sticker.parts`:
+  name, outline and joint in 0–1 image coords, motion cfg). Parts are not cut out (that left the
+  old hand behind and tore the wrist): `buildMesh()` in `js/parts.js` lays a grid over the picture
+  whose points follow the part fully inside the outline and less and less just outside it (more
+  generously near the joint), and `drawFrame()` draws the touched cells as textured triangles.
+  The app can't find a hand by itself (that would need AI image recognition), so worded part
+  requests (`parsePartRequests()`, several per sentence) queue each untraced part for tracing.
 
 ## Development Workflow
 
