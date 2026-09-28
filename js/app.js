@@ -10,7 +10,7 @@
 
   const W = 320;
   const H = 270;
-  const MAX_BYTES = 300 * 1024;
+  const MAX_BYTES = 300 * 1000; // LINE's 300 KB, counted the strict way
   const STORAGE_KEY = 'ugoku-stamp-maker:v1';
   const VALID_COUNTS = [8, 16, 24];
 
@@ -1597,7 +1597,7 @@
       const apng = await buildAPNG(st, W, H);
       const bytes = apng.length;
       if (token !== sizeToken) return;
-      el.textContent = `${(bytes / 1024).toFixed(0)} KB` + (apng.reduced ? '（256色）' : '');
+      el.textContent = `${(bytes / 1024).toFixed(0)} KB` + (apng.reduced ? `（${apng.reduced}）` : '');
       el.className = bytes > MAX_BYTES ? 'warn' : '';
       el.title = bytes > MAX_BYTES ? '300KBを超えています。コマ数を減らすか、画像を小さくしてください' : '';
     }, 400);
@@ -1651,24 +1651,37 @@
     c.width = w;
     c.height = h;
     const ctx = c.getContext('2d', { willReadFrequently: true });
-    const pngs = [];
-    const pixels = [];
-    for (let i = 0; i < st.frames; i++) {
-      renderSticker(c, st, i / st.frames, w, h);
-      pngs.push(await canvasToPNG(c));
-      pixels.push(ctx.getImageData(0, 0, w, h).data);
-    }
+    const render = async (frames) => {
+      const pngs = [];
+      const pixels = [];
+      for (let i = 0; i < frames; i++) {
+        renderSticker(c, st, i / frames, w, h);
+        pngs.push(await canvasToPNG(c));
+        pixels.push(ctx.getImageData(0, 0, w, h).data);
+      }
+      return { pngs, pixels };
+    };
     // delay per frame = duration / frames seconds, so one loop lasts exactly `duration` seconds.
-    const opts = { delayNum: st.duration, delayDen: st.frames, plays: st.loops };
-    const lossless = assembleAPNG(pngs, opts);
+    const optsFor = (frames) => ({ delayNum: st.duration, delayDen: frames, plays: st.loops });
+    let { pngs, pixels } = await render(st.frames);
+    const lossless = assembleAPNG(pngs, optsFor(st.frames));
     if (lossless.length <= MAX_BYTES || typeof CompressionStream === 'undefined') return lossless;
 
-    const { palette, indices } = quantize(pixels);
-    const indexed = [];
-    for (const idx of indices) indexed.push(await encodeIndexedPNG(w, h, idx, palette, deflate));
-    const small = assembleAPNG(indexed, opts);
-    small.reduced = true;
-    return small.length < lossless.length ? small : lossless;
+    // Photos can stay over 300 KB even at 256 colors: use fewer colors, then fewer frames.
+    let best = lossless;
+    for (const frames of new Set([st.frames, Math.max(5, Math.min(st.frames, 8))])) {
+      if (frames !== st.frames) ({ pixels } = await render(frames));
+      for (const colors of [256, 128, 64]) {
+        const { palette, indices } = quantize(pixels, colors);
+        const indexed = [];
+        for (const idx of indices) indexed.push(await encodeIndexedPNG(w, h, idx, palette, deflate));
+        const small = assembleAPNG(indexed, optsFor(frames));
+        small.reduced = frames === st.frames ? `${colors}色` : `${colors}色・${frames}コマ`;
+        if (small.length < best.length) best = small;
+        if (small.length <= MAX_BYTES) return small;
+      }
+    }
+    return best;
   }
 
   async function buildStill(st, w, h) {
