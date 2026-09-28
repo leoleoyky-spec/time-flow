@@ -1,0 +1,21 @@
+{
+  "analyzed": false,
+  "_note": "analyzed=false の間は暫定値。お手本の画面収録を分析したら値を上書きして true にする（references/analyze-reference.md）。",
+  "canvas": {"width": 1080, "height": 1920},
+  "font": {
+    "path": "/usr/share/fonts/opentype/ipafont-gothic/ipag.ttf",
+    "download_hint": "お手本に近い太字フォント（例: Noto Sans JP Black / M PLUS 1p ExtraBold）を assets/ に置いたら path をそこに変える"
+  },
+  "rhythm": {"seconds_per_caption": 1.6, "fade_in": 0.08},
+  "position": {"bottom_y": 0.70, "top_y": 0.14},
+  "types": {
+    "normal": {"size": 72, "color": "#FFFFFF", "stroke": 10, "stroke_color": "#000000", "box": null},
+    "box":    {"size": 80, "color": "#000000", "stroke": 0, "stroke_color": "#000000",
+               "box": {"color": "#FFE600", "pad_x": 36, "pad_y": 22, "radius": 12, "border": 0, "border_color": "#000000"}},
+    "hook":   {"size": 96, "color": "#FFFFFF", "stroke": 0, "stroke_color": "#000000",
+               "box": {"color": "#E60012", "pad_x": 44, "pad_y": 28, "radius": 8, "border": 8, "border_color": "#FFFFFF"}},
+    "cta":    {"size": 76, "color": "#FFFFFF", "stroke": 0, "stroke_color": "#000000",
+               "box": {"color": "#000000CC", "pad_x": 40, "pad_y": 24, "radius": 40, "border": 0, "border_color": "#000000"}}
+  },
+  "highlight_color": "#FFE600"
+}

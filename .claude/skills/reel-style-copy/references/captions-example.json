@@ -1,0 +1,7 @@
+[
+  {"start": 0.0, "end": 2.5, "type": "hook", "text": "これ知らないと\n損します"},
+  {"start": 2.5, "end": 4.1, "type": "normal", "text": "今日お話しするのは"},
+  {"start": 4.1, "end": 5.7, "type": "box", "text": "たった1つの習慣"},
+  {"start": 5.7, "end": 7.3, "type": "normal", "text": "[毎朝]やるだけで\n変わります", "position": "top"},
+  {"start": 105.0, "end": 108.3, "type": "cta", "text": "保存して\nあとで見返してね"}
+]
