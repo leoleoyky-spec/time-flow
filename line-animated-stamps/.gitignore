@@ -6,3 +6,5 @@ panda/*
 !panda/motions.csv
 hiyoko/*
 !hiyoko/motions.csv
+halloween/*
+!halloween/motions.csv
