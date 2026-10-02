@@ -758,8 +758,9 @@
   // Each sticker gets its own motion and effect, like a hand-made set; one tap reshuffles.
   const LOOKS = [
     ['bounce', 'sparkle'], ['swing', 'none'], ['pulse', 'hearts'], ['shake', 'lines'],
-    ['float', 'sparkle'], ['jelly', 'none'], ['bounce', 'notes'], ['swing', 'sparkle'],
-    ['pulse', 'none'], ['float', 'hearts'], ['shake', 'sweat'], ['jelly', 'sparkle'],
+    ['shiri', 'notes'], ['float', 'sparkle'], ['bow', 'none'], ['jelly', 'none'],
+    ['dance', 'notes'], ['swing', 'sparkle'], ['pulse', 'none'], ['float', 'hearts'],
+    ['shiri', 'sparkle'], ['shake', 'sweat'], ['dance', 'sparkle'], ['jelly', 'sparkle'],
   ];
   let lookOffset = 0;
   function lookFor(i) {

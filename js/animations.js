@@ -77,6 +77,24 @@
         return {};
       },
     },
+    // The top stays put and the bottom swings side to side, like wiggling hips.
+    shiri: {
+      label: 'おしりふりふり',
+      fn: (t, W, H) => ({ skew: Math.sin(t * TAU * 3) * 0.2, pivotY: -0.45, y: -Math.abs(Math.sin(t * TAU * 3)) * H * 0.015 }),
+    },
+    // Two hops per loop, leaning left on one and right on the other.
+    dance: {
+      label: 'ノリノリ',
+      fn: (t, W, H) => ({ y: -Math.abs(Math.sin(t * TAU * 2)) * H * 0.07, rot: Math.sin(t * TAU) * 0.14, pivotY: 0.45 }),
+    },
+    // Bow down, hold for a moment, come back up.
+    bow: {
+      label: 'ぺこり',
+      fn: (t) => {
+        const e = t < 0.3 ? easeInOut(t / 0.3) : t < 0.6 ? 1 : t < 0.9 ? 1 - easeInOut((t - 0.6) / 0.3) : 0;
+        return { sx: 1 + e * 0.04, sy: 1 - e * 0.18, rot: e * 0.06, pivotY: 0.45 };
+      },
+    },
     blink: { label: 'チカチカ', fn: (t) => ({ alpha: Math.floor(t * 4) % 2 === 0 ? 1 : 0.15 }) },
     typing: { label: '1文字ずつ', fn: (t) => ({ reveal: Math.min(1, t / 0.7) }) },
     rainbow: { label: 'レインボー', fn: (t) => ({ hue: t * 360 }) },
@@ -232,6 +250,10 @@
     anger: { label: 'プンプン', fn: drawAnger, color: '#e5484d' },
   };
 
+  function easeInOut(p) {
+    return p < 0.5 ? 2 * p * p : 1 - Math.pow(-2 * p + 2, 2) / 2;
+  }
+
   function easeOutBack(p) {
     const c1 = 1.70158;
     const c3 = c1 + 1;
@@ -365,6 +387,7 @@
     ctx.translate(W / 2 + (motion.x || 0), H / 2 + (motion.y || 0) + pivotY);
     ctx.rotate(motion.rot || 0);
     ctx.scale(motion.sx || 1, motion.sy || 1);
+    if (motion.skew) ctx.transform(1, 0, motion.skew, 1, 0, 0); // shear around the pivot
     ctx.translate(0, -pivotY);
     ctx.globalAlpha = motion.alpha === undefined ? 1 : Math.max(0, Math.min(1, motion.alpha));
 

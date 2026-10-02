@@ -181,3 +181,10 @@ test('buildSpritePrompt asks for a looping, aligned grid on a white background',
   assert.match(p, /「おさんぽ」という文字/);
   assert.match(buildSpritePrompt({ action: 'ウインク', frames: 9 }), /3列×3行、全9コマ/);
 });
+
+test('おしりふりふり, dancing and bowing pick their own presets', () => {
+  assert.strictEqual(parseInstruction('おしりふりふり').changes.motion, 'shiri');
+  assert.strictEqual(parseInstruction('ノリノリで踊る').changes.motion, 'dance');
+  assert.strictEqual(parseInstruction('「ありがとう」でぺこりとおじぎ').changes.motion, 'bow');
+  assert.strictEqual(parseInstruction('大きく跳ねる').changes.motion, 'custom');
+});

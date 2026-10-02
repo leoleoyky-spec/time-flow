@@ -267,6 +267,10 @@
     if (/動かさない|動かない|うごかない|止めたまま|静止画/.test(rest)) {
       changes.motion = 'none';
       understood.push('動かさない');
+    } else if (PRESET_WORDS.some((w) => w.re.test(rest))) {
+      const w = PRESET_WORDS.find((x) => x.re.test(rest));
+      changes.motion = w.motion;
+      understood.push('動き：' + w.label);
     } else {
       const m = parseMotionText(rest);
       if (m) {
@@ -277,6 +281,13 @@
     }
     return { changes, understood };
   }
+
+  // Motions that have their own preset, used as-is instead of the custom sliders.
+  const PRESET_WORDS = [
+    { motion: 'shiri', label: 'おしりふりふり', re: /おしり|お尻|オシリ|ヒップ/ },
+    { motion: 'dance', label: 'ノリノリ', re: /ダンス|だんす|踊|おどる|おどって|ノリノリ|のりのり/ },
+    { motion: 'bow', label: 'ぺこり', re: /ぺこり|ペコリ|おじぎ|お辞儀/ },
+  ];
 
   const WISH_EXAMPLES = [
     '「おはよう」をピンクの文字で、キラキラさせて、ふわふわ',
