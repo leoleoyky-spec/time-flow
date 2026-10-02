@@ -85,6 +85,64 @@ def _hull(points, size):
     return out
 
 
+def _background_level(mn):
+    """マスの外周の明るさ = 背景の白さ (真っ白でない紙色の背景にも対応)."""
+    w, h = mn.size
+    px = mn.load()
+    edge = sorted([px[x, 0] for x in range(w)] + [px[x, h - 1] for x in range(w)] +
+                  [px[0, y] for y in range(h)] + [px[w - 1, y] for y in range(h)])
+    return edge[len(edge) // 2]
+
+
+def _fill_holes(mask):
+    pad = Image.new("L", (mask.width + 2, mask.height + 2), 0)
+    pad.paste(mask, (1, 1))
+    ImageDraw.floodfill(pad, (0, 0), 128)
+    return pad.point(lambda v: 0 if v == 128 else 255).crop((1, 1, mask.width + 1, mask.height + 1))
+
+
+def _bands(profile, n):
+    """True/False の並びを、大きいすき間で n 個の帯に分ける。境界のリストを返す."""
+    idx = [i for i, v in enumerate(profile) if v]
+    if not idx:
+        return None
+    gaps, i = [], idx[0]
+    while i <= idx[-1]:
+        if not profile[i]:
+            s = i
+            while not profile[i]:
+                i += 1
+            gaps.append((i - s, s, i))
+        i += 1
+    if len(gaps) < n - 1:
+        return None
+    cuts = sorted((s + e) // 2 for _, s, e in sorted(gaps, reverse=True)[:n - 1])
+    return [0] + cuts + [len(profile)]
+
+
+def detect_cells(sheet, cols, rows):
+    """イラストの並びからマス目を見つける。等間隔でない一覧画像にも対応 (見つからなければ等分)."""
+    if sheet.mode == "RGBA":
+        ink = sheet.getchannel("A").point(lambda v: 255 if v > 40 else 0)
+    else:
+        mn = _min_channel(sheet)
+        bg = _background_level(mn)
+        ink = mn.point(lambda v: 255 if bg - v > 25 else 0)
+    w, h = ink.size
+    px = ink.load()
+    row_prof = [sum(1 for x in range(0, w, 2) if px[x, y]) >= 2 for y in range(h)]
+    ys = _bands(row_prof, rows)
+    boxes = []
+    for r in range(rows):
+        y0, y1 = (ys[r], ys[r + 1]) if ys else (round(r * h / rows), round((r + 1) * h / rows))
+        col_prof = [sum(1 for y in range(y0, y1, 2) if px[x, y]) >= 1 for x in range(w)]
+        xs = _bands(col_prof, cols) if ys else None
+        for c in range(cols):
+            x0, x1 = (xs[c], xs[c + 1]) if xs else (round(c * w / cols), round((c + 1) * w / cols))
+            boxes.append((x0, y0, x1, y1))
+    return boxes
+
+
 def _dilate(mask, r):
     return mask.filter(ImageFilter.GaussianBlur(r / 2)).point(lambda v: 255 if v > 12 else 0)
 
@@ -111,13 +169,20 @@ def cut_cell(cell, stroke=4):
     else:
         cell = cell.convert("RGB")
         mn = _min_channel(cell)
-        ink = mn.point(lambda v: 255 if 255 - v > 32 else 0)
-        # 線画の色・濃さから透明度を作る (白い背景 → 透明)
-        soft = mn.point(lambda v: max(0, min(255, (240 - v) * 4)))
+        bg = _background_level(mn)
+        ink = mn.point(lambda v: 255 if bg - v > 25 else 0)
+        # 線画の色・濃さから透明度を作る (背景の白 → 透明)
+        soft = mn.point(lambda v: max(0, min(255, (bg - 8 - v) * 4)))
         comps = _components(ink.filter(ImageFilter.MaxFilter(3)))
         body = max(comps, key=len)
-        # キャラは線が途切れていても顔の白が抜けないよう、外形 (凸包) の内側を塗る
-        alpha = ImageChops.lighter(soft, _hull(body, cell.size))
+        # 線で囲まれた白 (マグカップの中・花びらなど) は残す
+        holes = _fill_holes(ink.filter(ImageFilter.MaxFilter(3))).filter(ImageFilter.MinFilter(3))
+        hull = _hull(body, cell.size)
+        # 線が途切れていて顔の白が外とつながっている (パンダなど) 場合は、外形 (凸包) の内側を塗る
+        inside = ImageChops.darker(hull, ImageChops.invert(holes))
+        leak = sum(inside.histogram()[128:]) / max(1, sum(hull.histogram()[128:]))
+        fill = ImageChops.lighter(holes, hull) if leak > 0.33 else holes
+        alpha = ImageChops.lighter(soft, fill)
     top = min(y for _, y in body)
 
     text_mask = Image.new("L", cell.size, 0)
@@ -566,7 +631,7 @@ def main(argv=None):
     has_alpha = "A" in sheet.getbands() and sheet.getchannel("A").getextrema()[0] < 250
     sheet = sheet.convert("RGBA" if has_alpha else "RGB")
     print("背景透過の画像です。元の透明度をそのまま使います" if has_alpha else "白背景の画像です。白を自動で抜きます")
-    cw, ch = sheet.width / cols, sheet.height / rows
+    boxes = detect_cells(sheet, cols, rows)
     count = cols * rows
     conf = read_config(args.config, count)
     out = Path(args.out)
@@ -579,7 +644,7 @@ def main(argv=None):
         specs.append(ms.StampSpec(source=folder, frames=cfg["frames"], seconds=cfg["seconds"], loops=cfg["loops"]))
         if args.only and args.only != i + 1:
             continue
-        cell = sheet.crop((round(c * cw), round(r * ch), round((c + 1) * cw), round((r + 1) * ch)))
+        cell = sheet.crop(boxes[i])
         stamp = Stamp(cell, args.stroke)
         folder.mkdir(parents=True, exist_ok=True)
         for old in folder.glob("*.png"):

@@ -64,3 +64,29 @@ def test_cut_cell_uses_existing_transparency():
     assert char.getchannel("A").getpixel((100, 120)) == 255     # 白い顔はそのまま不透明
     assert char.getchannel("A").getpixel((5, 195)) == 0
     assert char.getchannel("A").getpixel((100, 50)) == 0 or char.getchannel("A").getpixel((100, 45)) == 0
+
+
+def test_detect_cells_handles_uneven_layout():
+    # 下に大きな余白がある 2x2 の一覧画像。等分すると2段目のイラストが1段目のマスに入ってしまう
+    im = Image.new("RGB", (400, 600), (245, 245, 240))
+    d = ImageDraw.Draw(im)
+    for cx, cy in ((100, 80), (300, 80), (100, 260), (300, 260)):
+        d.ellipse((cx - 50, cy - 50, cx + 50, cy + 50), fill=(250, 230, 0), outline=(0, 0, 0), width=4)
+    boxes = st.detect_cells(im, 2, 2)
+    for (x0, y0, x1, y1), (cx, cy) in zip(boxes, ((100, 80), (300, 80), (100, 260), (300, 260))):
+        assert x0 < cx - 50 and cx + 50 < x1 and y0 < cy - 50 and cy + 50 < y1
+
+
+def test_colored_character_keeps_gaps_transparent():
+    # 黄色いキャラ: 足のすき間は透明のまま、線で囲まれた白 (マグカップ) は残す
+    im = Image.new("RGB", (200, 200), (245, 245, 240))
+    d = ImageDraw.Draw(im)
+    d.ellipse((50, 50, 150, 140), fill=(250, 230, 0), outline=(0, 0, 0), width=4)
+    d.line((80, 136, 80, 162), fill=(0, 0, 0), width=4)
+    d.line((120, 136, 120, 162), fill=(0, 0, 0), width=4)
+    d.rectangle((150, 90, 180, 120), fill=(255, 255, 255), outline=(0, 0, 0), width=4)
+    text, char = st.cut_cell(im, 0)
+    a = char.getchannel("A")
+    assert a.getpixel((100, 155)) == 0      # 足の間
+    assert a.getpixel((165, 105)) == 255    # マグカップの白
+    assert a.getpixel((100, 95)) == 255     # 体
