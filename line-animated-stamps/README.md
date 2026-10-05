@@ -158,6 +158,16 @@ python preview_video.py girl/output --cols 5 -o girl/preview.mp4 --bg 4fc3f7
 
 `--bg` で背景色（16進数）を変えられます。既定はあざやかな水色（`4fc3f7`）です。
 
+## 一覧画像の背景のまま動かす（`sheet_video.py`）
+
+切り抜いて並べ直すのではなく、元の一覧画像の背景・並びのまま、それぞれのスタンプをその場で動かした動画を作ります。
+
+```bash
+python sheet_video.py girl/sheet.webp --grid 5x5 --config girl/motions.csv -o girl/sheet_video.mp4
+```
+
+2行になっている文字は、`motions.csv` の `whole` 列を `1` にすると、行が混ざらないようにまとめて動きます。
+
 ## テスト
 
 ```bash

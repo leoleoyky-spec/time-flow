@@ -524,7 +524,7 @@ FX = {"burst": f_burst, "sparkles": f_sparkles, "twinkle": f_twinkle, "hearts": 
 # ---- 1コマの合成 ------------------------------------------------------------
 
 class Stamp:
-    def __init__(self, cell, stroke=4):
+    def __init__(self, cell, stroke=4, whole_text=False):
         text, char = cut_cell(cell, stroke)
         self.text_src, self.char_src = text, char
         tb, cb = text.getbbox(), char.getbbox()
@@ -551,7 +551,9 @@ class Stamp:
         self.letters = []
         if tb:
             text_c = place(text)
-            for x0, x1 in split_letters(text):
+            # 2行以上の文字は1文字ずつに分けると行が混ざるので、whole=1 ならまとめて1つとして動かす
+            ranges = [(0, text.width)] if whole_text else split_letters(text)
+            for x0, x1 in ranges:
                 cx0 = round((x0 * scale + ox) * S) - S
                 cx1 = round((x1 * scale + ox) * S) + S
                 piece = Image.new("RGBA", text_c.size, (255, 255, 255, 0))
@@ -607,7 +609,8 @@ def read_config(path, count):
         c, t, fx = DEFAULT_CYCLE[i % len(DEFAULT_CYCLE)]
         out.append(dict(char=r.get("char") or c, text=r.get("text") or t, fx=r.get("fx") or fx,
                         frames=int(r.get("frames") or 20), seconds=int(r.get("seconds") or 1),
-                        loops=int(r.get("loops") or 3), name=r.get("name", "")))
+                        loops=int(r.get("loops") or 3), name=r.get("name", ""),
+                        whole=(r.get("whole") or "").strip() in ("1", "yes", "true")))
     return out
 
 
@@ -615,7 +618,7 @@ def main(argv=None):
     ap = argparse.ArgumentParser(description="一覧画像 → 派手に動くLINEスタンプ")
     ap.add_argument("sheet", help="スタンプを並べた一覧画像")
     ap.add_argument("--grid", default="4x4", help="列x行 (既定 4x4)")
-    ap.add_argument("--config", help="動きの指定CSV (name,char,text,fx,frames,seconds,loops)")
+    ap.add_argument("--config", help="動きの指定CSV (name,char,text,fx,frames,seconds,loops,whole)")
     ap.add_argument("-o", "--out", default="output")
     ap.add_argument("--only", type=int, help="この番号のスタンプだけ作る (確認用)")
     ap.add_argument("--stroke", type=int, default=0, help="白フチの太さ px (既定 0 = フチなし。4 程度でダークモードでも見やすくなる)")
@@ -640,7 +643,7 @@ def main(argv=None):
         if args.only and args.only != i + 1:
             continue
         cell = sheet.crop(boxes[i])
-        stamp = Stamp(cell, args.stroke)
+        stamp = Stamp(cell, args.stroke, cfg["whole"])
         folder.mkdir(parents=True, exist_ok=True)
         for old in folder.glob("*.png"):
             old.unlink()
