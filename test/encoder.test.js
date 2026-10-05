@@ -113,3 +113,13 @@ test('createZip produces an archive unzip accepts', (t) => {
   assert.match(out, /main\.png/);
   assert.match(out, /01\.png/);
 });
+
+test('lineStickerSize fills 320×270 and keeps one side at least 270px', () => {
+  const { lineStickerSize } = require('../js/encoder.js');
+  assert.deepStrictEqual([lineStickerSize(300, 200).w, lineStickerSize(300, 200).h], [320, 213]);
+  assert.deepStrictEqual([lineStickerSize(100, 250).w, lineStickerSize(100, 250).h], [108, 270]);
+  for (const [bw, bh] of [[50, 40], [400, 400], [320, 100], [10, 300]]) {
+    const { w, h } = lineStickerSize(bw, bh);
+    assert.ok(w <= 320 && h <= 270 && (w >= 270 || h >= 270), `${bw}x${bh} → ${w}x${h}`);
+  }
+});

@@ -24,8 +24,11 @@ time-flow/
 └── package.json         # npm scripts (no dependencies)
 ```
 
-LINE animated sticker rules the app enforces: 320×270 px, 5–20 frames, total playback ≤ 4 s,
-1–4 loops, ≤ 300 KB per file, sets of 8/16/24, plus `main.png` (240×240 APNG) and `tab.png` (96×74).
+LINE animated sticker rules the app enforces: at most 320×270 px with one side ≥ 270, 5–20 frames,
+total playback ≤ 4 s, 1–4 loops, ≤ 300 KB per file (300,000 bytes), sets of 8/16/24, plus `main.png`
+(240×240 APNG) and `tab.png` (96×74). LINE also rejects drawings cut off at the edge and still margins,
+so export (`renderFitted()` in `js/app.js`) draws every frame with room around it, crops to the area any
+frame uses and scales that to the largest size that fits (`lineStickerSize()` in `js/encoder.js`).
 
 Two features worth knowing about when touching `js/app.js` or `js/animations.js`:
 - **Background removal**: `removeBackgroundPixels()` in `js/bg-remove.js` flood-fills a flat

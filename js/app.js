@@ -2,7 +2,7 @@
   'use strict';
 
   const { FONTS, MOTIONS, EFFECTS, defaultSticker, drawFrame, layoutSticker } = window.Stickers;
-  const { assembleAPNG, quantize, encodeIndexedPNG, createZip } = window.Encoder;
+  const { assembleAPNG, quantize, encodeIndexedPNG, createZip, lineStickerSize } = window.Encoder;
   const { parseInstruction, parsePartRequests, parsePartMotion, buildSpritePrompt, WISH_EXAMPLES } = window.MotionWords;
   const { removeBackgroundPixels } = window.BgRemove;
   const { guessPivot, buildMesh, findEye, PART_MOTIONS } = window.Parts;
@@ -1071,9 +1071,13 @@
   // The picture that decides the sticker's layout (all frames are the same size).
   const layoutImage = (st) => getImage(isFrames(st) ? st.frameImages[0] : st.image);
 
-  function renderSticker(canvas, st, t, w = W, h = H) {
+  // `pad` leaves room around the sticker (as a fraction of its size) for export, where
+  // motion that leaves the 320×270 box has to be kept.
+  function renderSticker(canvas, st, t, w = W, h = H, pad = 0) {
     const ctx = canvas.getContext('2d');
-    ctx.setTransform(canvas.width / w, 0, 0, canvas.height / h, 0, 0);
+    const sx = canvas.width / (w * (1 + 2 * pad));
+    const sy = canvas.height / (h * (1 + 2 * pad));
+    ctx.setTransform(sx, 0, 0, sy, pad * w * sx, pad * h * sy);
     if (isFrames(st)) {
       const i = frameIndex(st, t);
       drawFrame(ctx, st, t, w, h, getImage(st.frameImages[i]) || layoutImage(st), { adjust: st.frameAdj[i] || {} });
@@ -1647,35 +1651,89 @@
   }
 
   // Lossless first; if that exceeds LINE's 300KB limit, fall back to a shared 256-color palette.
-  async function buildAPNG(st, w, h) {
-    const c = document.createElement('canvas');
-    c.width = w;
-    c.height = h;
-    const ctx = c.getContext('2d', { willReadFrequently: true });
-    const render = async (frames) => {
-      const pngs = [];
-      const pixels = [];
-      for (let i = 0; i < frames; i++) {
-        renderSticker(c, st, i / frames, w, h);
-        pngs.push(await canvasToPNG(c));
-        pixels.push(ctx.getImageData(0, 0, w, h).data);
-      }
-      return { pngs, pixels };
+  // LINE rejects stickers cut off at the edges and stickers with a still margin around
+  // the drawing. So each frame is drawn with room around it (a bounce can leave the
+  // 320×270 box), cropped to the area any frame uses, and scaled to the output:
+  // `contain` keeps the given w × h (main.png, tab.png) and centers the drawing in it;
+  // otherwise the output is as large as fits in w × h (lineStickerSize()).
+  const EXPORT_ROOM = 0.3;
+  const EXPORT_RES = 2;
+  async function renderFitted(st, w, h, ts, contain) {
+    const big = document.createElement('canvas');
+    big.width = Math.round(w * (1 + 2 * EXPORT_ROOM) * EXPORT_RES);
+    big.height = Math.round(h * (1 + 2 * EXPORT_ROOM) * EXPORT_RES);
+    const bctx = big.getContext('2d', { willReadFrequently: true });
+    const draw = (t) => {
+      bctx.setTransform(1, 0, 0, 1, 0, 0);
+      bctx.clearRect(0, 0, big.width, big.height);
+      renderSticker(big, st, t, w, h, EXPORT_ROOM);
     };
+    let box = null;
+    for (const t of ts) {
+      draw(t);
+      const b = boundingBox(bctx.getImageData(0, 0, big.width, big.height).data, big.width, big.height);
+      if (!b) continue;
+      box = box
+        ? { x: Math.min(box.x, b.x), y: Math.min(box.y, b.y), r: Math.max(box.r, b.x + b.w), b: Math.max(box.b, b.y + b.h) }
+        : { x: b.x, y: b.y, r: b.x + b.w, b: b.y + b.h };
+    }
+    if (!box) {
+      const x = EXPORT_ROOM * w * EXPORT_RES;
+      const y = EXPORT_ROOM * h * EXPORT_RES;
+      box = { x, y, r: x + w * EXPORT_RES, b: y + h * EXPORT_RES };
+    }
+    const sw = box.r - box.x;
+    const sh = box.b - box.y;
+    let ow = w;
+    let oh = h;
+    let dx = 0;
+    let dy = 0;
+    let dw;
+    let dh;
+    if (contain) {
+      const s = Math.min(w / sw, h / sh);
+      dw = sw * s;
+      dh = sh * s;
+      dx = (w - dw) / 2;
+      dy = (h - dh) / 2;
+    } else {
+      ({ w: ow, h: oh } = lineStickerSize(sw / EXPORT_RES, sh / EXPORT_RES, w, h));
+      dw = ow;
+      dh = oh;
+    }
+    const out = document.createElement('canvas');
+    out.width = ow;
+    out.height = oh;
+    const octx = out.getContext('2d', { willReadFrequently: true });
+    octx.imageSmoothingQuality = 'high';
+    const pngs = [];
+    const pixels = [];
+    for (const t of ts) {
+      draw(t);
+      octx.clearRect(0, 0, ow, oh);
+      octx.drawImage(big, box.x, box.y, sw, sh, dx, dy, dw, dh);
+      pngs.push(await canvasToPNG(out));
+      pixels.push(octx.getImageData(0, 0, ow, oh).data);
+    }
+    return { pngs, pixels, w: ow, h: oh };
+  }
+
+  async function buildAPNG(st, w, h, contain = false) {
+    const times = (n) => [...Array(n).keys()].map((i) => i / n);
+    let r = await renderFitted(st, w, h, times(st.frames), contain);
     // delay per frame = duration / frames seconds, so one loop lasts exactly `duration` seconds.
     const optsFor = (frames) => ({ delayNum: st.duration, delayDen: frames, plays: st.loops });
-    let { pngs, pixels } = await render(st.frames);
-    const lossless = assembleAPNG(pngs, optsFor(st.frames));
+    const lossless = assembleAPNG(r.pngs, optsFor(st.frames));
     if (lossless.length <= MAX_BYTES || typeof CompressionStream === 'undefined') return lossless;
 
     // Photos can stay over 300 KB even at 256 colors: use fewer colors, then fewer frames.
     let best = lossless;
     for (const frames of new Set([st.frames, Math.max(5, Math.min(st.frames, 8))])) {
-      if (frames !== st.frames) ({ pixels } = await render(frames));
+      if (frames !== st.frames) r = await renderFitted(st, w, h, times(frames), contain);
       for (const colors of [256, 128, 64]) {
-        const { palette, indices } = quantize(pixels, colors);
+        const { palette, indices } = quantize(r.pixels, colors);
         const indexed = [];
-        for (const idx of indices) indexed.push(await encodeIndexedPNG(w, h, idx, palette, deflate));
+        for (const idx of indices) indexed.push(await encodeIndexedPNG(r.w, r.h, idx, palette, deflate));
         const small = assembleAPNG(indexed, optsFor(frames));
         small.reduced = frames === st.frames ? `${colors}色` : `${colors}色・${frames}コマ`;
         if (small.length < best.length) best = small;
@@ -1684,14 +1742,10 @@
     }
     return best;
   }
-
   async function buildStill(st, w, h) {
-    const c = document.createElement('canvas');
-    c.width = w;
-    c.height = h;
-    renderSticker(c, st, stillT(st), w, h);
-    return canvasToPNG(c);
+    return (await renderFitted(st, w, h, [stillT(st)], true)).pngs[0];
   }
+
 
   // Inside a claude.ai Artifact, plain downloads are blocked; use its downloads capability there.
   const artifactDownloads =
@@ -1756,7 +1810,7 @@
       }
       const first = state.stickers[0];
       files.unshift(
-        { name: 'main.png', data: await buildAPNG(first, 240, 240) },
+        { name: 'main.png', data: await buildAPNG(first, 240, 240, true) },
         { name: 'tab.png', data: await buildStill(first, 96, 74) }
       );
       if (!(await download(createZip(files), 'line_animation_stickers.zip', 'application/zip'))) {

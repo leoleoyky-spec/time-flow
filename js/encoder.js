@@ -310,7 +310,21 @@
     return concat([...locals, ...centrals, end]);
   }
 
-  const api = { crc32, parseChunks, makeChunk, assembleAPNG, quantize, encodeIndexedPNG, createZip };
+  /**
+   * Output size for a LINE animated sticker whose drawing (all its motion included)
+   * covers bw × bh: as large as fits in 320 × 270. One side then reaches its limit,
+   * which also meets LINE's "width or height 270px or more".
+   */
+  function lineStickerSize(bw, bh, maxW = 320, maxH = 270) {
+    const scale = Math.min(maxW / bw, maxH / bh);
+    return {
+      scale,
+      w: Math.min(maxW, Math.max(1, Math.round(bw * scale))),
+      h: Math.min(maxH, Math.max(1, Math.round(bh * scale))),
+    };
+  }
+
+  const api = { lineStickerSize, crc32, parseChunks, makeChunk, assembleAPNG, quantize, encodeIndexedPNG, createZip };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.Encoder = api;
 })(typeof window !== 'undefined' ? window : globalThis);
