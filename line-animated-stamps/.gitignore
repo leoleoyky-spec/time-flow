@@ -8,3 +8,5 @@ hiyoko/*
 !hiyoko/motions.csv
 halloween/*
 !halloween/motions.csv
+girl/*
+!girl/motions.csv

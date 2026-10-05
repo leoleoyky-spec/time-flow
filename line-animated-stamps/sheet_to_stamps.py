@@ -37,11 +37,6 @@ WHITE = (255, 255, 255, 255)
 
 # ---- 切り抜き ---------------------------------------------------------------
 
-def _min_channel(img):
-    r, g, b = img.convert("RGB").split()
-    return ImageChops.darker(ImageChops.darker(r, g), b)
-
-
 def _components(mask):
     """連結成分 (ピクセル座標リスト) の一覧."""
     w, h = mask.size
@@ -85,13 +80,16 @@ def _hull(points, size):
     return out
 
 
-def _background_level(mn):
-    """マスの外周の明るさ = 背景の白さ (真っ白でない紙色の背景にも対応)."""
-    w, h = mn.size
-    px = mn.load()
-    edge = sorted([px[x, 0] for x in range(w)] + [px[x, h - 1] for x in range(w)] +
-                  [px[0, y] for y in range(h)] + [px[w - 1, y] for y in range(h)])
-    return edge[len(edge) // 2]
+def _bg_distance(img):
+    """各ピクセルの「背景色からの違い」(0〜255)。白・水色など背景が何色でも使える."""
+    rgb = img.convert("RGB")
+    w, h = rgb.size
+    px = rgb.load()
+    edge = [px[x, 0] for x in range(w)] + [px[x, h - 1] for x in range(w)] + \
+           [px[0, y] for y in range(h)] + [px[w - 1, y] for y in range(h)]
+    bg = tuple(sorted(c[i] for c in edge)[len(edge) // 2] for i in range(3))
+    diffs = [ImageChops.difference(ch, Image.new("L", rgb.size, v)) for ch, v in zip(rgb.split(), bg)]
+    return ImageChops.lighter(ImageChops.lighter(diffs[0], diffs[1]), diffs[2])
 
 
 def _fill_holes(mask):
@@ -125,9 +123,7 @@ def detect_cells(sheet, cols, rows):
     if sheet.mode == "RGBA":
         ink = sheet.getchannel("A").point(lambda v: 255 if v > 40 else 0)
     else:
-        mn = _min_channel(sheet)
-        bg = _background_level(mn)
-        ink = mn.point(lambda v: 255 if bg - v > 25 else 0)
+        ink = _bg_distance(sheet).point(lambda v: 255 if v > 25 else 0)
     w, h = ink.size
     px = ink.load()
     row_prof = [sum(1 for x in range(0, w, 2) if px[x, y]) >= 2 for y in range(h)]
@@ -168,11 +164,10 @@ def cut_cell(cell, stroke=4):
         body = max(comps, key=len)
     else:
         cell = cell.convert("RGB")
-        mn = _min_channel(cell)
-        bg = _background_level(mn)
-        ink = mn.point(lambda v: 255 if bg - v > 25 else 0)
-        # 線画の色・濃さから透明度を作る (背景の白 → 透明)
-        soft = mn.point(lambda v: max(0, min(255, (bg - 8 - v) * 4)))
+        dist = _bg_distance(cell)
+        ink = dist.point(lambda v: 255 if v > 25 else 0)
+        # 背景色との違いから透明度を作る (背景 → 透明)
+        soft = dist.point(lambda v: max(0, min(255, (v - 8) * 4)))
         comps = _components(ink.filter(ImageFilter.MaxFilter(3)))
         body = max(comps, key=len)
         # 線で囲まれた白 (マグカップの中・花びらなど) は残す
