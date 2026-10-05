@@ -147,6 +147,17 @@ python sheet_to_stamps.py panda/sheet.webp --grid 4x4 --config panda/motions.csv
 | `text`（文字） | `slam` ドン!と落ちる / `pop` 1文字ずつ出る / `wave` 1文字ずつぴょこぴょこ / `shake` ぶるぶる / `jump` 交互にジャンプ / `slide` 左からスライド / `sway` ゆらゆら |
 | `fx`（効果） | `burst` 集中線 / `sparkles` キラキラ / `twinkle` 四隅がキラッ / `hearts` ハート / `confetti` 紙吹雪 / `rays` 光線 / `speed` スピード線 / `zzz` おやすみ / `anger` 怒りの線 / `shock` 衝撃の輪 / `none` なし |
 
+## 確認用の動画を作る（`preview_video.py`）
+
+作ったスタンプを並べて、全部が同時に動く MP4 を作ります（Threads などの紹介用）。
+
+```bash
+pip install imageio-ffmpeg
+python preview_video.py girl/output --cols 5 -o girl/preview.mp4 --bg 4fc3f7
+```
+
+`--bg` で背景色（16進数）を変えられます。既定はあざやかな水色（`4fc3f7`）です。
+
 ## テスト
 
 ```bash
