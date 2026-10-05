@@ -259,7 +259,16 @@ code { background: var(--accent-soft); padding: 0 4px; border-radius: 4px; }
   .topbar { padding: 16px 16px 4px; }
   .layout { grid-template-columns: 1fr; padding: 12px 16px; }
   .preview-panel { order: -1; }
+  /* Nothing made yet: the "load pictures" button comes first instead of an empty preview. */
+  body.is-empty .list-panel { order: -2; }
   .sticker-list { grid-template-columns: repeat(4, 1fr); max-height: none; }
   .specs { grid-template-columns: repeat(2, 1fr); }
   .foot { padding: 0 16px 24px; }
+}
+
+/* Fingers (phones, tablets): bigger targets than a mouse needs. */
+@media (pointer: coarse) {
+  .chip { min-height: 40px; padding: 8px 14px; }
+  .btn.small { min-height: 40px; }
+  .editor input[type="range"] { height: 36px; }
 }

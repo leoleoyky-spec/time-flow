@@ -1121,6 +1121,7 @@
 
     const count = state.stickers.length;
     $('count').textContent = count;
+    document.body.classList.toggle('is-empty', state.stickers.every(isBlank));
     const hint = $('countHint');
     if (VALID_COUNTS.includes(count)) {
       hint.textContent = `${count}個セット：LINEに申請できる個数です`;
