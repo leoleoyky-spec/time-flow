@@ -1749,20 +1749,22 @@
 
 
   // Inside a claude.ai Artifact, plain downloads are blocked; use its downloads capability there.
-  const artifactDownloads =
-    window.claude && typeof window.claude.use === 'function'
-      ? window.claude.use('downloads').catch(() => null)
-      : Promise.resolve(null);
+  // That capability only works for members of the owner's organization, so everyone else is
+  // pointed to the same app on its public page, where an ordinary download works.
+  const PUBLIC_URL = 'https://leoleoyky-spec.github.io/time-flow/';
+  const inArtifact = !!(window.claude && typeof window.claude.use === 'function');
+  const artifactDownloads = inArtifact ? window.claude.use('downloads').catch(() => null) : Promise.resolve(null);
 
+  // Resolves 'saved', 'declined', or 'blocked' (this page can't save files for this viewer).
   async function download(bytes, name, type) {
-    const downloads = await artifactDownloads;
-    if (downloads) {
+    if (inArtifact) {
+      const downloads = await artifactDownloads;
+      if (!downloads) return 'blocked';
       try {
         await downloads.save({ filename: name, data: new Blob([bytes], { type }) });
-        return true;
+        return 'saved';
       } catch (err) {
-        if (err && err.code === 'declined') return false;
-        throw new Error(err && err.message ? err.message : '保存できませんでした');
+        return err && err.code === 'declined' ? 'declined' : 'blocked';
       }
     }
     const url = URL.createObjectURL(new Blob([bytes], { type }));
@@ -1773,6 +1775,16 @@
     a.click();
     a.remove();
     setTimeout(() => URL.revokeObjectURL(url), 2000);
+    return 'saved';
+  }
+
+  function notSaved(result) {
+    if (result === 'saved') return false;
+    if (result === 'blocked') {
+      setStatus('このページからは保存できませんでした。下のページで同じアプリを開くと保存できます：', true, PUBLIC_URL);
+    } else {
+      setStatus('保存をキャンセルしました' + (inArtifact ? '。保存できないときは、こちらのページを使ってください：' : ''), false, inArtifact ? PUBLIC_URL : null);
+    }
     return true;
   }
 
@@ -1793,7 +1805,7 @@
     return withBusy(async () => {
       const num = String(state.selected + 1).padStart(2, '0');
       const bytes = await buildAPNG(current(), W, H);
-      if (!(await download(bytes, `${num}.png`, 'image/png'))) return setStatus('保存をキャンセルしました');
+      if (notSaved(await download(bytes, `${num}.png`, 'image/png'))) return;
       setStatus(`${num}.png を保存しました（${(bytes.length / 1024).toFixed(0)} KB）`, bytes.length > MAX_BYTES);
     });
   }
@@ -1814,9 +1826,7 @@
         { name: 'main.png', data: await buildAPNG(first, 240, 240, true) },
         { name: 'tab.png', data: await buildStill(first, 96, 74) }
       );
-      if (!(await download(createZip(files), 'line_animation_stickers.zip', 'application/zip'))) {
-        return setStatus('保存をキャンセルしました');
-      }
+      if (notSaved(await download(createZip(files), 'line_animation_stickers.zip', 'application/zip'))) return;
 
       const notes = [];
       if (oversized.length) notes.push(`300KB超え：${oversized.join(', ')}`);
@@ -1825,10 +1835,18 @@
     });
   }
 
-  function setStatus(msg, warn) {
+  function setStatus(msg, warn, link) {
     const el = $('status');
     el.textContent = msg;
     el.style.color = warn ? 'var(--danger)' : '';
+    if (link) {
+      const a = document.createElement('a');
+      a.href = link;
+      a.target = '_blank';
+      a.rel = 'noopener';
+      a.textContent = link;
+      el.append(' ', a);
+    }
   }
 
   // ---------- boot ----------
