@@ -139,9 +139,9 @@ No build step. Serve the repo root over HTTP and open it: `npm start` (runs `pyt
 Opening `index.html` directly via `file://` also works (plain scripts, no ES modules).
 
 The app is also shared as a claude.ai Artifact, where saving goes through the `downloads`
-capability; that only works for members of the owner's organization. Everyone else is pointed to
-the public copy served by GitHub Pages from this repo (`PUBLIC_URL` in `js/app.js`), where an
-ordinary download works.
+capability; that only works for members of the owner's organization. For everyone else
+`showForSaving()` in `js/app.js` shows the finished PNGs on the page to save by hand
+(right-click / long-press).
 
 ## Testing
 

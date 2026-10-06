@@ -1749,9 +1749,8 @@
 
 
   // Inside a claude.ai Artifact, plain downloads are blocked; use its downloads capability there.
-  // That capability only works for members of the owner's organization, so everyone else is
-  // pointed to the same app on its public page, where an ordinary download works.
-  const PUBLIC_URL = 'https://leoleoyky-spec.github.io/time-flow/';
+  // That capability only works for members of the owner's organization; everyone else gets
+  // the images shown on the page to save by hand (showForSaving()).
   const inArtifact = !!(window.claude && typeof window.claude.use === 'function');
   const artifactDownloads = inArtifact ? window.claude.use('downloads').catch(() => null) : Promise.resolve(null);
 
@@ -1778,12 +1777,58 @@
     return 'saved';
   }
 
-  function notSaved(result) {
+  // When this page can't save files for the viewer, show the finished images instead:
+  // saving a picture from the page (right-click / long-press) works for everyone.
+  function showForSaving(files) {
+    let box = $('saveBox');
+    if (!box) {
+      box = document.createElement('div');
+      box.id = 'saveBox';
+      box.className = 'save-box';
+      box.setAttribute('role', 'dialog');
+      box.setAttribute('aria-modal', 'true');
+      document.body.append(box);
+    }
+    box.innerHTML = '';
+    const panel = document.createElement('div');
+    panel.className = 'save-panel';
+    const h = document.createElement('h2');
+    h.textContent = '画像を1つずつ保存してください';
+    const p = document.createElement('p');
+    p.className = 'hint';
+    p.textContent = 'このページからは自動で保存できないため、できあがった画像を並べました。パソコンは画像を右クリック →「名前を付けて画像を保存」、スマホは画像を長押しして保存します。ファイル名は画像の下の名前（01.png など）にしてください。';
+    const grid = document.createElement('div');
+    grid.className = 'save-grid';
+    for (const f of files) {
+      const fig = document.createElement('figure');
+      const img = document.createElement('img');
+      img.src = URL.createObjectURL(new Blob([f.data], { type: 'image/png' }));
+      img.alt = f.name;
+      const cap = document.createElement('figcaption');
+      cap.textContent = f.name;
+      fig.append(img, cap);
+      grid.append(fig);
+    }
+    const close = document.createElement('button');
+    close.type = 'button';
+    close.className = 'btn';
+    close.textContent = '閉じる';
+    close.addEventListener('click', () => {
+      box.querySelectorAll('img').forEach((i) => URL.revokeObjectURL(i.src));
+      box.remove();
+    });
+    panel.append(h, p, grid, close);
+    box.append(panel);
+  }
+
+  // `files` are the PNGs inside what was being saved, shown instead when saving is blocked.
+  function notSaved(result, files) {
     if (result === 'saved') return false;
     if (result === 'blocked') {
-      setStatus('このページからは保存できませんでした。下のページで同じアプリを開くと保存できます：', true, PUBLIC_URL);
+      showForSaving(files);
+      setStatus('このページからは自動で保存できないため、画像を表示しました');
     } else {
-      setStatus('保存をキャンセルしました' + (inArtifact ? '。保存できないときは、こちらのページを使ってください：' : ''), false, inArtifact ? PUBLIC_URL : null);
+      setStatus('保存をキャンセルしました');
     }
     return true;
   }
@@ -1805,7 +1850,7 @@
     return withBusy(async () => {
       const num = String(state.selected + 1).padStart(2, '0');
       const bytes = await buildAPNG(current(), W, H);
-      if (notSaved(await download(bytes, `${num}.png`, 'image/png'))) return;
+      if (notSaved(await download(bytes, `${num}.png`, 'image/png'), [{ name: `${num}.png`, data: bytes }])) return;
       setStatus(`${num}.png を保存しました（${(bytes.length / 1024).toFixed(0)} KB）`, bytes.length > MAX_BYTES);
     });
   }
@@ -1826,7 +1871,7 @@
         { name: 'main.png', data: await buildAPNG(first, 240, 240, true) },
         { name: 'tab.png', data: await buildStill(first, 96, 74) }
       );
-      if (notSaved(await download(createZip(files), 'line_animation_stickers.zip', 'application/zip'))) return;
+      if (notSaved(await download(createZip(files), 'line_animation_stickers.zip', 'application/zip'), files)) return;
 
       const notes = [];
       if (oversized.length) notes.push(`300KB超え：${oversized.join(', ')}`);
