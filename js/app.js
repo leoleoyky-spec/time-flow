@@ -1750,7 +1750,9 @@
 
   // Inside a claude.ai Artifact, plain downloads are blocked; use its downloads capability there.
   // That capability only works for members of the owner's organization; everyone else gets
-  // the images shown on the page to save by hand (showForSaving()).
+  // the images shown on the page to save by hand (showForSaving()), and a link to the same
+  // app on its public page (GitHub Pages), where the ZIP downloads normally.
+  const PUBLIC_URL = 'https://leoleoyky-spec.github.io/time-flow/';
   const inArtifact = !!(window.claude && typeof window.claude.use === 'function');
   const artifactDownloads = inArtifact ? window.claude.use('downloads').catch(() => null) : Promise.resolve(null);
 
@@ -1817,7 +1819,16 @@
       box.querySelectorAll('img').forEach((i) => URL.revokeObjectURL(i.src));
       box.remove();
     });
-    panel.append(h, p, grid, close);
+    const zip = document.createElement('p');
+    zip.className = 'hint';
+    zip.append('ZIPでまとめて保存したいときは、こちらのページで同じアプリを使ってください： ');
+    const a = document.createElement('a');
+    a.href = PUBLIC_URL;
+    a.target = '_blank';
+    a.rel = 'noopener';
+    a.textContent = PUBLIC_URL;
+    zip.append(a);
+    panel.append(h, p, zip, grid, close);
     box.append(panel);
   }
 

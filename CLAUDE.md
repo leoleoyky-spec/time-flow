@@ -141,7 +141,8 @@ Opening `index.html` directly via `file://` also works (plain scripts, no ES mod
 The app is also shared as a claude.ai Artifact, where saving goes through the `downloads`
 capability; that only works for members of the owner's organization. For everyone else
 `showForSaving()` in `js/app.js` shows the finished PNGs on the page to save by hand
-(right-click / long-press).
+(right-click / long-press) and links to the public copy on GitHub Pages (`PUBLIC_URL`, served from
+the `claude/youthful-noether-zsthi7` branch), where an ordinary ZIP download works.
 
 ## Testing
 
